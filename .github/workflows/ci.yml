@@ -1,0 +1,153 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit (production)
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  electron-security:
+    name: Electron Security Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check Electron security settings
+        run: |
+          echo "=== Checking Electron security configuration ==="
+
+          # Verify contextIsolation is enabled
+          if grep -r "contextIsolation:\s*true" electron/main.ts; then
+            echo "✅ contextIsolation: enabled"
+          else
+            echo "❌ contextIsolation: not found or disabled" && exit 1
+          fi
+
+          # Verify nodeIntegration is disabled
+          if grep -r "nodeIntegration:\s*false" electron/main.ts; then
+            echo "✅ nodeIntegration: disabled"
+          else
+            echo "❌ nodeIntegration: not found or enabled" && exit 1
+          fi
+
+          # Verify sandbox is enabled
+          if grep -r "sandbox:\s*true" electron/main.ts; then
+            echo "✅ sandbox: enabled"
+          else
+            echo "❌ sandbox: not found or disabled" && exit 1
+          fi
+
+          # Check for dangerous patterns
+          echo ""
+          echo "=== Scanning for dangerous patterns ==="
+
+          ISSUES=0
+
+          if grep -rn "nodeIntegration:\s*true" electron/ src/; then
+            echo "❌ Found nodeIntegration: true"
+            ISSUES=$((ISSUES+1))
+          fi
+
+          if grep -rn "contextIsolation:\s*false" electron/ src/; then
+            echo "❌ Found contextIsolation: false"
+            ISSUES=$((ISSUES+1))
+          fi
+
+          if grep -rn "webSecurity:\s*false" electron/ src/; then
+            echo "❌ Found webSecurity: false"
+            ISSUES=$((ISSUES+1))
+          fi
+
+          if grep -rn "allowRunningInsecureContent:\s*true" electron/ src/; then
+            echo "❌ Found allowRunningInsecureContent: true"
+            ISSUES=$((ISSUES+1))
+          fi
+
+          if [ $ISSUES -eq 0 ]; then
+            echo "✅ No dangerous patterns found"
+          else
+            echo ""
+            echo "Found $ISSUES security issue(s)"
+            exit 1
+          fi

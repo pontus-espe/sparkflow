@@ -10,6 +10,13 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/pontus-espe/sparkflow/actions/workflows/ci.yml"><img src="https://github.com/pontus-espe/sparkflow/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/pontus-espe/sparkflow/actions/workflows/release.yml"><img src="https://github.com/pontus-espe/sparkflow/actions/workflows/release.yml/badge.svg" alt="Build & Release" /></a>
+  <a href="https://github.com/pontus-espe/sparkflow/releases/latest"><img src="https://img.shields.io/github/v/release/pontus-espe/sparkflow?label=latest" alt="Latest Release" /></a>
+  <img src="https://img.shields.io/github/license/pontus-espe/sparkflow" alt="License" />
+</p>
+
+<p align="center">
   <img src="docs/screenshot.png" alt="SparkFlow Screenshot" width="900" />
 </p>
 
@@ -105,6 +112,28 @@ src/                # Renderer process
   types/            # TypeScript type definitions
 shared/             # IPC channel constants
 ```
+
+## CI & Security
+
+Every push and pull request runs the following checks via GitHub Actions:
+
+| Check | What it does |
+|-------|-------------|
+| **TypeScript** | `tsc --noEmit` — catches type errors across the entire codebase |
+| **Build** | Full `electron-vite build` — ensures renderer + main process compile |
+| **Dependency Audit** | `npm audit` — flags known vulnerabilities in production dependencies |
+| **CodeQL** | GitHub's semantic code analysis — detects security vulnerabilities, bugs, and anti-patterns in JS/TS |
+| **Electron Security** | Custom check verifying `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, and absence of dangerous patterns like `webSecurity: false` |
+
+### Electron Security Model
+
+SparkFlow follows Electron security best practices:
+
+- **Context Isolation** — Renderer and main process are fully isolated via `contextBridge`
+- **Sandbox enabled** — Renderer runs in a Chromium sandbox
+- **No Node Integration** — Renderer cannot access Node.js APIs directly
+- **Preload bridge** — All IPC goes through a typed preload script with explicit channel allowlisting
+- **Microapp sandbox** — AI-generated code runs in `new Function()` with a controlled stdlib — no access to `window`, `document`, `fetch`, or `require`
 
 ## License
 
