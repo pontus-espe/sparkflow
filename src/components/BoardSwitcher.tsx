@@ -5,6 +5,7 @@ import { useDataStore } from '@/stores/data-store'
 import { ipc } from '@/services/ipc-client'
 import { LayoutGrid, Plus, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { MicroappIcon, MicroappColor } from '@/types/microapp'
 
 export function BoardSwitcher() {
   const { currentBoardId, currentBoardName, boardList, setCurrentBoard, setBoardList } =
@@ -104,8 +105,8 @@ export function BoardSwitcher() {
               error: null,
               status: 'ready',
               streamingText: '',
-              icon: (m.icon as string) || 'sparkles',
-              color: (m.color as string) || 'default',
+              icon: ((m.icon as string) || 'sparkles') as MicroappIcon,
+              color: ((m.color as string) || 'default') as MicroappColor,
               state: (m.state as Record<string, unknown>) || {},
               position: { x: m.position_x as number, y: m.position_y as number },
               size: { width: m.width as number, height: m.height as number },

@@ -106,6 +106,13 @@ export async function getDatabase(): Promise<Database> {
   return db
 }
 
+// Helper to convert sql.js result row to an object
+function rowToObject(columns: string[], values: unknown[]): Record<string, unknown> {
+  const obj: Record<string, unknown> = {}
+  columns.forEach((col: string, i: number) => { obj[col] = values[i] })
+  return obj
+}
+
 export function saveDatabase(): void {
   if (!db) return
   const data = db.export()
@@ -133,26 +140,14 @@ export async function loadBoard(id: string): Promise<Record<string, unknown> | n
   const database = await getDatabase()
   const result = database.exec(`SELECT * FROM boards WHERE id = ?`, [id])
   if (result.length === 0 || result[0].values.length === 0) return null
-  const cols = result[0].columns
-  const row = result[0].values[0]
-  const obj: Record<string, unknown> = {}
-  cols.forEach((col, i) => {
-    obj[col] = row[i]
-  })
-  return obj
+  return rowToObject(result[0].columns, result[0].values[0])
 }
 
 export async function listBoards(): Promise<Record<string, unknown>[]> {
   const database = await getDatabase()
   const result = database.exec(`SELECT id, name, updated_at FROM boards ORDER BY updated_at DESC`)
   if (result.length === 0) return []
-  return result[0].values.map((row) => {
-    const obj: Record<string, unknown> = {}
-    result[0].columns.forEach((col, i) => {
-      obj[col] = row[i]
-    })
-    return obj
-  })
+  return result[0].values.map((row: unknown[]) => rowToObject(result[0].columns, row))
 }
 
 // Data source CRUD
@@ -180,24 +175,14 @@ export async function getDataSources(boardId: string): Promise<Record<string, un
   const database = await getDatabase()
   const result = database.exec(`SELECT * FROM data_sources WHERE board_id = ?`, [boardId])
   if (result.length === 0) return []
-  return result[0].values.map((row) => {
-    const obj: Record<string, unknown> = {}
-    result[0].columns.forEach((col, i) => {
-      obj[col] = row[i]
-    })
-    return obj
-  })
+  return result[0].values.map((row: unknown[]) => rowToObject(result[0].columns, row))
 }
 
 export async function getDataSource(id: string): Promise<Record<string, unknown> | null> {
   const database = await getDatabase()
   const result = database.exec(`SELECT * FROM data_sources WHERE id = ?`, [id])
   if (result.length === 0 || result[0].values.length === 0) return null
-  const obj: Record<string, unknown> = {}
-  result[0].columns.forEach((col, i) => {
-    obj[col] = result[0].values[0][i]
-  })
-  return obj
+  return rowToObject(result[0].columns, result[0].values[0])
 }
 
 export async function deleteDataSource(id: string): Promise<void> {
@@ -240,11 +225,5 @@ export async function getMicroapps(boardId: string): Promise<Record<string, unkn
   const database = await getDatabase()
   const result = database.exec(`SELECT * FROM microapps WHERE board_id = ?`, [boardId])
   if (result.length === 0) return []
-  return result[0].values.map((row) => {
-    const obj: Record<string, unknown> = {}
-    result[0].columns.forEach((col, i) => {
-      obj[col] = row[i]
-    })
-    return obj
-  })
+  return result[0].values.map((row: unknown[]) => rowToObject(result[0].columns, row))
 }

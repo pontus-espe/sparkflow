@@ -31,7 +31,8 @@ export function compileMicroapp(source: string): CompileResult {
   }
 }
 
-export function createMicroappFactory(compiled: string): Function {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function createMicroappFactory(compiled: string): any {
   // Wrap the compiled code in a function that receives the stdlib
   const wrapper = `
     return function MicroApp(props) {

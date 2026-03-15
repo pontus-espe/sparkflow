@@ -9,6 +9,7 @@ import { useDataStore } from '@/stores/data-store'
 import { useAIStore } from '@/stores/ai-store'
 import { ModelSettings } from '@/components/ai/ModelSettings'
 import { cn } from '@/lib/utils'
+import type { MicroappIcon, MicroappColor } from '@/types/microapp'
 
 // Track which boards have open tabs
 interface TabInfo {
@@ -175,8 +176,8 @@ export function Titlebar() {
             error: null,
             status: 'ready',
             streamingText: '',
-            icon: (m.icon as string) || 'sparkles',
-            color: (m.color as string) || 'default',
+            icon: ((m.icon as string) || 'sparkles') as MicroappIcon,
+            color: ((m.color as string) || 'default') as MicroappColor,
             state: (m.state as Record<string, unknown>) || {},
             position: { x: m.position_x as number, y: m.position_y as number },
             size: { width: m.width as number, height: m.height as number },

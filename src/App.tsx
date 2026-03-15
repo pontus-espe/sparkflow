@@ -11,11 +11,12 @@ import { useDataStore } from '@/stores/data-store'
 import { useAIStore } from '@/stores/ai-store'
 import { ipc } from '@/services/ipc-client'
 import { seedWelcomeBoard } from '@/lib/welcome-board'
+import type { MicroappIcon, MicroappColor } from '@/types/microapp'
 
 const AUTOSAVE_INTERVAL = 5000
 
 export default function App() {
-  const saveTimerRef = useRef<ReturnType<typeof setInterval>>()
+  const saveTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
   const aiStatus = useAIStore((s) => s.status)
 
   const saveBoard = useCallback(async () => {
@@ -141,8 +142,8 @@ export default function App() {
             error: null,
             status: 'ready',
             streamingText: '',
-            icon: (m.icon as string) || 'sparkles',
-            color: (m.color as string) || 'default',
+            icon: ((m.icon as string) || 'sparkles') as MicroappIcon,
+            color: ((m.color as string) || 'default') as MicroappColor,
             state: (m.state as Record<string, unknown>) || {},
             position: { x: m.position_x as number, y: m.position_y as number },
             size: { width: m.width as number, height: m.height as number },

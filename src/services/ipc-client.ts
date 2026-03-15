@@ -11,7 +11,10 @@ export const windowControls = {
   maximize: () => getApi().windowMaximize(),
   close: () => getApi().windowClose(),
   isMaximized: () => getApi().windowIsMaximized() as Promise<boolean>,
-  onMaximizeChange: (cb: (maximized: boolean) => void) => getApi().onWindowMaximizeChange(cb)
+  onMaximizeChange: (cb: (maximized: boolean) => void): (() => void) => {
+    const cleanup = getApi().onWindowMaximizeChange(cb)
+    return () => { cleanup() }
+  }
 }
 
 export const ipc = {
@@ -33,23 +36,25 @@ export const ipc = {
     generate: (prompt: string, system?: string) => getApi().ollamaGenerate(prompt, system),
     generateQuick: (prompt: string, system?: string) =>
       getApi().ollamaGenerateQuick(prompt, system) as Promise<{ text?: string; error?: string }>,
-    onStream: (cb: (chunk: string) => void) => getApi().onOllamaStream(cb),
-    onStreamDone: (cb: (text: string) => void) => getApi().onOllamaStreamDone(cb),
-    onStreamError: (cb: (error: string) => void) => getApi().onOllamaStreamError(cb),
+    onStream: (cb: (chunk: string) => void): (() => void) => { const c = getApi().onOllamaStream(cb); return () => { c() } },
+    onStreamDone: (cb: (text: string) => void): (() => void) => { const c = getApi().onOllamaStreamDone(cb); return () => { c() } },
+    onStreamError: (cb: (error: string) => void): (() => void) => { const c = getApi().onOllamaStreamError(cb); return () => { c() } },
     setModel: (model: string) => getApi().ollamaSetModel(model),
     listModels: () => getApi().ollamaListModels(),
     pullModel: (model: string) => getApi().ollamaPullModel(model),
-    onPullProgress: (cb: (progress: number) => void) => getApi().onOllamaPullProgress(cb),
-    onPullStatus: (cb: (status: { model: string; status: string; completed?: number; total?: number }) => void) =>
-      getApi().onOllamaPullStatus(cb),
-    onStartupStatus: (cb: (status: { phase: string; message: string; progress?: number; model?: string }) => void) =>
-      getApi().onOllamaStartupStatus(cb)
+    onPullProgress: (cb: (progress: number) => void): (() => void) => { const c = getApi().onOllamaPullProgress(cb); return () => { c() } },
+    onPullStatus: (cb: (status: { model: string; status: string; completed?: number; total?: number }) => void): (() => void) => { const c = getApi().onOllamaPullStatus(cb); return () => { c() } },
+    onStartupStatus: (cb: (status: { phase: string; message: string; progress?: number; model?: string }) => void): (() => void) => {
+      const c = getApi().onOllamaStartupStatus(cb); return () => { c() }
+    }
   },
   data: {
     importFile: () => getApi().dataImportFile(),
     importFilePath: (path: string) => getApi().dataImportFilePath(path),
-    onSourceUpdated: (cb: (update: { id: string; name: string; columns: { name: string; type: string }[]; rowCount: number; rows: unknown[] }) => void) =>
-      getApi().onDataSourceUpdated(cb),
+    onSourceUpdated: (cb: (update: { id: string; name: string; columns: { name: string; type: string }[]; rowCount: number; rows: unknown[] }) => void): (() => void) => {
+      const cleanup = getApi().onDataSourceUpdated(cb as (update: { id: string; name: string; columns: unknown[]; rowCount: number; rows: unknown[] }) => void)
+      return () => { cleanup() }
+    },
     querySource: (sourceId: string, query?: string) => getApi().dataQuerySource(sourceId, query),
     saveManualTable: (data: unknown) => getApi().dataSaveManualTable(data),
     getSources: (boardId: string) => getApi().dataGetSources(boardId),
@@ -85,8 +90,10 @@ export const ipc = {
     delete: (id: string) => getApi().boardDelete(id)
   },
   app: {
-    onUpdateAvailable: (cb: (info: { currentVersion: string; latestVersion: string; url: string }) => void) =>
-      getApi().onUpdateAvailable(cb),
+    onUpdateAvailable: (cb: (info: { currentVersion: string; latestVersion: string; url: string }) => void): (() => void) => {
+      const cleanup = getApi().onUpdateAvailable(cb)
+      return () => { cleanup() }
+    },
     openExternal: (url: string) => getApi().openExternal(url)
   }
 }

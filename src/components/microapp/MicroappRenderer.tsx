@@ -38,7 +38,7 @@ export function MicroappRenderer({ microappId, onEditSource }: MicroappRendererP
     }
 
     try {
-      const factory = createMicroappFactory(compileResult.compiled)
+      const factory = createMicroappFactory(compileResult.compiled) as React.ComponentType<{ __stdlib: unknown }>
       return { Component: factory, error: null }
     } catch (err) {
       return {
