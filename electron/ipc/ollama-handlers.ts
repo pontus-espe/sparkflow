@@ -63,7 +63,7 @@ async function generateWithOllama(win: BrowserWindow, prompt: string, system?: s
         options: {
           temperature: 0.25,
           num_predict: 4096,
-          num_ctx: 8192,
+          num_ctx: 16384,
           top_p: 0.9
         }
       })
@@ -302,7 +302,7 @@ export function registerOllamaHandlers(): void {
             prompt,
             system: system || undefined,
             stream: false,
-            options: { temperature: 0.3, num_predict: 256, num_ctx: 8192 }
+            options: { temperature: 0.3, num_predict: 256, num_ctx: 16384 }
           })
         })
         if (!response.ok) return { error: `Ollama error: ${response.status}` }
