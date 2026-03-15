@@ -12,6 +12,7 @@ export function StatusBar() {
     starting: 'text-yellow-500',
     'downloading-ollama': 'text-blue-500',
     'pulling-model': 'text-blue-500',
+    'warming-model': 'text-yellow-500',
     ready: 'text-green-500',
     downloading: 'text-blue-500',
     error: 'text-destructive',
@@ -40,6 +41,9 @@ export function StatusBar() {
       } else {
         statusText = `AI Ready`
       }
+      break
+    case 'warming-model':
+      statusText = 'AI: Loading model...'
       break
     case 'hardware-insufficient':
       statusText = 'AI: Setup required'

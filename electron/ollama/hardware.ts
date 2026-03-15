@@ -39,14 +39,15 @@ export function detectHardware(): HardwareInfo {
   let recommendedModel: string
   let recommendedQuantization: string
 
-  if (effectiveRam >= 8) {
+  if (effectiveRam >= 16) {
     recommendedModel = 'qwen3.5:latest'
     recommendedQuantization = 'Q4_K_M'
   } else if (effectiveRam >= 4) {
+    // 4b (3.4GB) is a much better first-launch experience — fast download, works on most machines
     recommendedModel = 'qwen3.5:4b'
     recommendedQuantization = 'Q4_K_M'
   } else {
-    recommendedModel = 'qwen3.5:4b'
+    recommendedModel = 'qwen3.5:0.8b'
     recommendedQuantization = 'Q4_0'
   }
 

@@ -1,7 +1,7 @@
-import { useEffect, useCallback, useRef, useState } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { Board } from '@/components/canvas/Board'
-import { ApiKeyPrompt } from '@/components/ai/ApiKeyPrompt'
+import { SetupScreen } from '@/components/SetupScreen'
 import { Toasts } from '@/components/Toasts'
 import { Titlebar } from '@/components/Titlebar'
 import { startStatusPolling } from '@/services/ollama-client'
@@ -10,12 +10,13 @@ import { useMicroappStore } from '@/stores/microapp-store'
 import { useDataStore } from '@/stores/data-store'
 import { useAIStore } from '@/stores/ai-store'
 import { ipc } from '@/services/ipc-client'
+import { seedWelcomeBoard } from '@/lib/welcome-board'
 
 const AUTOSAVE_INTERVAL = 5000
 
 export default function App() {
   const saveTimerRef = useRef<ReturnType<typeof setInterval>>()
-  const [showApiKeyPrompt, setShowApiKeyPrompt] = useState(false)
+  const aiStatus = useAIStore((s) => s.status)
 
   const saveBoard = useCallback(async () => {
     const { nodes, edges, viewport, currentBoardId, currentBoardName } = useBoardStore.getState()
@@ -63,12 +64,14 @@ export default function App() {
         store.setStatus('pulling-model')
         if (status.model) store.setModel(status.model)
         if (status.progress != null) store.setDownloadProgress(status.progress)
+      } else if (status.phase === 'warming-model') {
+        store.setStatus('warming-model')
+        if (status.model) store.setModel(status.model)
       } else if (status.phase === 'ready') {
         store.setStatus('ready')
       } else if (status.phase === 'hardware-insufficient') {
         store.setStatus('hardware-insufficient')
         store.setHardwareSufficient(false)
-        setShowApiKeyPrompt(true)
       } else if (status.phase === 'error') {
         store.setStatus('error')
         store.setError(status.message)
@@ -107,11 +110,14 @@ export default function App() {
   useEffect(() => {
     async function loadBoard() {
       const data = await ipc.board.load('default')
-      if (!data || !data.canvas_state) return
+      if (!data || !data.canvas_state) {
+        // First run — seed welcome board
+        seedWelcomeBoard()
+        return
+      }
 
       try {
         const canvasState = JSON.parse(data.canvas_state as string)
-        // Ensure data source nodes start hidden (toggled via microapp toolbar)
         const loadedNodes = (canvasState.nodes || []).map((n: { type?: string; hidden?: boolean }) =>
           n.type === 'dataSource' ? { ...n, hidden: true } : n
         )
@@ -123,7 +129,6 @@ export default function App() {
           viewport: canvasState.viewport || { x: 0, y: 0, zoom: 1 }
         })
 
-        // Restore microapps
         const microapps = (data.microapps || []) as Array<Record<string, unknown>>
         for (const m of microapps) {
           useMicroappStore.getState().addInstance({
@@ -145,7 +150,6 @@ export default function App() {
             updatedAt: m.updated_at as number
           })
         }
-        // Restore data sources
         const dataSources = (data.dataSources || []) as Array<Record<string, unknown>>
         for (const s of dataSources) {
           useDataStore.getState().addSource({
@@ -171,6 +175,9 @@ export default function App() {
     loadBoard()
   }, [])
 
+  // Show setup screen for any non-ready state (except when already configured via Anthropic)
+  const showSetup = aiStatus !== 'ready'
+
   return (
     <div className="flex flex-col h-screen bg-background">
       <Titlebar />
@@ -180,9 +187,7 @@ export default function App() {
         </div>
       </ReactFlowProvider>
       <Toasts />
-      {showApiKeyPrompt && (
-        <ApiKeyPrompt onDone={() => setShowApiKeyPrompt(false)} />
-      )}
+      {showSetup && <SetupScreen />}
     </div>
   )
 }

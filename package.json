@@ -1,6 +1,6 @@
 {
   "name": "sparkflow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AI-Powered Microapp Canvas — Drop data, describe what you need, get a live interactive app on an infinite canvas.",
   "author": {
     "name": "Pontus Espe",
@@ -33,6 +33,12 @@
       "!node_modules/**/test/**",
       "!node_modules/**/docs/**",
       "!node_modules/**/*.md"
+    ],
+    "asarUnpack": [
+      "node_modules/electron-ollama/**",
+      "node_modules/yauzl/**",
+      "node_modules/tar/**",
+      "node_modules/sql.js/**"
     ],
     "extraResources": [
       {

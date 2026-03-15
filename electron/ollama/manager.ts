@@ -106,6 +106,16 @@ export async function isOllamaRunning(): Promise<boolean> {
   }
 }
 
+/** Wait for Ollama to become reachable, polling every intervalMs */
+async function waitForOllama(timeoutMs: number, intervalMs = 500): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await isOllamaRunning()) return true
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+  return false
+}
+
 export async function ensureOllamaRunning(
   onLog?: (message: string) => void,
   onDownloadProgress?: (percent: number, message: string) => void
@@ -119,30 +129,67 @@ export async function ensureOllamaRunning(
   const ollama = getOllama()
 
   // Download if needed
-  const versions = await ollama.downloadedVersions()
-  if (versions.length === 0) {
-    onLog?.('Downloading Ollama...')
-    await ollama.download('latest', undefined, {
-      log: (percent, message) => {
-        onDownloadProgress?.(percent, message)
-        onLog?.(`Download: ${percent}% - ${message}`)
-      }
-    })
+  let versions: string[] = []
+  try {
+    versions = await ollama.downloadedVersions()
+    console.log('[Ollama] Downloaded versions:', versions)
+  } catch (err) {
+    console.warn('[Ollama] Failed to list versions:', err)
   }
 
-  const allVersions = await ollama.downloadedVersions()
+  if (versions.length === 0) {
+    onLog?.('Downloading Ollama...')
+    try {
+      await ollama.download('latest', undefined, {
+        log: (percent, message) => {
+          onDownloadProgress?.(percent, message)
+        }
+      })
+    } catch (err) {
+      console.error('[Ollama] Download failed:', err)
+      throw new Error(`Failed to download Ollama: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  let allVersions: string[] = []
+  try {
+    allVersions = await ollama.downloadedVersions()
+  } catch { /* ignore */ }
+  console.log('[Ollama] Available versions after download:', allVersions)
+
   if (allVersions.length === 0) {
-    throw new Error('Failed to download Ollama')
+    throw new Error('Failed to download Ollama — no versions found after download')
   }
 
   const version = allVersions[allVersions.length - 1] as `v${number}.${number}.${number}`
   onLog?.(`Starting Ollama ${version}...`)
-  await ollama.serve(version, {
-    serverLog: (message) => onLog?.(message),
-    timeoutSec: 30
-  })
-  managedByUs = true
-  onLog?.('Ollama is running')
+  console.log(`[Ollama] Starting serve for version ${version}...`)
+
+  try {
+    await ollama.serve(version, {
+      serverLog: (message) => {
+        console.log('[Ollama Server]', message)
+        onLog?.(message)
+      },
+      timeoutSec: 60 // 60s timeout — first start can be slow
+    })
+    managedByUs = true
+    onLog?.('Ollama is running')
+    console.log('[Ollama] serve() completed successfully')
+  } catch (serveErr) {
+    console.warn('[Ollama] serve() threw, but process may still be starting:', serveErr)
+    // The serve() timeout may fire before the server is actually ready.
+    // Give it extra time — poll for up to 30 more seconds.
+    onLog?.('Waiting for Ollama to become ready...')
+    const reachable = await waitForOllama(30_000)
+    if (reachable) {
+      managedByUs = true
+      onLog?.('Ollama is running')
+      console.log('[Ollama] Server became reachable after extended wait')
+    } else {
+      throw new Error('Ollama server failed to start. The process was launched but never became reachable.')
+    }
+  }
 }
 
 export async function stopOllama(): Promise<void> {
@@ -171,6 +218,7 @@ export async function pullModel(
   model: string,
   onProgress?: (status: string, completed?: number, total?: number) => void
 ): Promise<void> {
+  console.log(`[Ollama] Pulling model: ${model}`)
   const response = await fetch(`${OLLAMA_BASE}/api/pull`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -178,7 +226,8 @@ export async function pullModel(
   })
 
   if (!response.ok || !response.body) {
-    throw new Error(`Failed to pull model: ${response.statusText}`)
+    const errText = await response.text().catch(() => '')
+    throw new Error(`Failed to pull model (${response.status}): ${errText || response.statusText}`)
   }
 
   const reader = response.body.getReader()
@@ -194,10 +243,17 @@ export async function pullModel(
     for (const line of lines) {
       try {
         const data = JSON.parse(line)
+        if (data.error) {
+          throw new Error(`Model pull error: ${data.error}`)
+        }
         onProgress?.(data.status, data.completed, data.total)
-      } catch { /* skip */ }
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith('Model pull error:')) throw e
+        // skip malformed JSON lines
+      }
     }
   }
+  console.log(`[Ollama] Model ${model} pull completed`)
 }
 
 /** Warm up the model so it's loaded and ready when the user generates */

@@ -339,7 +339,7 @@ export function Titlebar() {
           >
             <Circle className={cn('h-1.5 w-1.5 fill-current', {
               'text-green-500': aiStatus === 'ready',
-              'text-yellow-500': aiStatus === 'starting' || aiStatus === 'hardware-insufficient',
+              'text-yellow-500': aiStatus === 'starting' || aiStatus === 'hardware-insufficient' || aiStatus === 'warming-model',
               'text-blue-500': aiStatus === 'downloading-ollama' || aiStatus === 'pulling-model' || aiStatus === 'downloading',
               'text-destructive': aiStatus === 'error',
               'text-muted-foreground': aiStatus === 'not-started'

@@ -5,17 +5,17 @@ export async function checkOllamaStatus(): Promise<void> {
   const store = useAIStore.getState()
   const currentStatus = store.status
 
-  // Don't downgrade from ready — only an explicit error or startup event should change it
-  if (currentStatus === 'ready') return
-
-  // Don't override active startup phases or hardware prompt (managed by startup-status events)
+  // Don't override active download/pull phases or hardware prompt (managed by startup-status events)
   if (currentStatus === 'downloading-ollama' || currentStatus === 'pulling-model' || currentStatus === 'hardware-insufficient') return
 
-  // If using Anthropic, skip Ollama polling
-  if (store.provider === 'anthropic') return
+  // If using Anthropic and already ready, skip polling
+  if (store.provider === 'anthropic' && currentStatus === 'ready') return
 
   try {
     const result = await ipc.ollama.status()
+    if (result.provider === 'anthropic') {
+      store.setProvider('anthropic')
+    }
     if (result.status === 'ready') {
       store.setStatus('ready')
       store.setModel(result.model)

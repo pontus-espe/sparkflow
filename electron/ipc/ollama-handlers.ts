@@ -331,6 +331,13 @@ export function registerOllamaHandlers(): void {
     }
   })
 
+  ipcMain.handle('ai:retry-setup', async () => {
+    console.log('[IPC] Retry setup requested')
+    startupInProgress = false // Allow retry
+    startOllamaWithApp()
+    return { success: true }
+  })
+
   ipcMain.handle('ai:set-config', async (_event, config: {
     provider?: AIProvider
     anthropicApiKey?: string | null
@@ -386,10 +393,19 @@ export function registerOllamaHandlers(): void {
   })
 }
 
+let startupInProgress = false
+
 export async function startOllamaWithApp(): Promise<void> {
+  if (startupInProgress) {
+    console.log('[Startup] Already in progress — skipping duplicate call')
+    return
+  }
+  startupInProgress = true
   try {
     // If using Anthropic provider, skip Ollama startup entirely
     const provider = getProvider()
+    console.log(`[Startup] Provider: ${provider}`)
+
     if (provider === 'anthropic') {
       const apiKey = getAnthropicApiKey()
       if (apiKey) {
@@ -401,8 +417,9 @@ export async function startOllamaWithApp(): Promise<void> {
 
     // Check hardware capability
     const hardware = detectHardware()
+    console.log(`[Startup] Hardware: ${hardware.freeRamGB}GB free RAM, GPU VRAM: ${hardware.gpuVramGB}GB, sufficient: ${hardware.sufficient}`)
+
     if (!hardware.sufficient && provider === 'local') {
-      // Hardware is insufficient — prompt for API key
       broadcast('ollama:startup-status', {
         phase: 'hardware-insufficient',
         message: `Your system has ${hardware.freeRamGB}GB free RAM — local AI requires at least 4GB. Please provide an Anthropic API key.`
@@ -410,33 +427,49 @@ export async function startOllamaWithApp(): Promise<void> {
       return
     }
 
-    broadcast('ollama:startup-status', { phase: 'starting', message: 'Starting Ollama...' })
+    broadcast('ollama:startup-status', { phase: 'starting', message: 'Starting AI engine...' })
 
+    let isDownloading = false
     await ensureOllamaRunning(
       (msg) => {
         console.log('[Ollama]', msg)
-        broadcast('ollama:startup-status', { phase: 'starting', message: msg })
+        // If we're in the download phase, log messages should use downloading-ollama phase
+        if (msg.includes('Downloading') || msg.includes('Download')) {
+          isDownloading = true
+        }
+        if (msg === 'Ollama is running' || msg.includes('Starting Ollama')) {
+          isDownloading = false
+          broadcast('ollama:startup-status', { phase: 'starting', message: msg })
+        } else if (isDownloading) {
+          broadcast('ollama:startup-status', { phase: 'downloading-ollama', message: msg, progress: 0 })
+        } else {
+          broadcast('ollama:startup-status', { phase: 'starting', message: msg })
+        }
       },
       (percent, msg) => {
+        isDownloading = true
         console.log(`[Ollama Download] ${percent}% - ${msg}`)
         broadcast('ollama:startup-status', {
           phase: 'downloading-ollama',
-          message: `Downloading Ollama: ${percent}%`,
+          message: `Downloading AI engine: ${percent}%`,
           progress: percent
         })
       }
     )
 
+    console.log('[Startup] Ollama is running, checking models...')
+
     // Check if a model is available, auto-pull if not
     const models = await getOllamaModels()
+    console.log('[Startup] Installed models:', models)
+
     if (models.length === 0) {
-      const hardware = detectHardware()
       const model = hardware.recommendedModel
-      console.log(`[Ollama] No models found. Pulling ${model}...`)
+      console.log(`[Startup] No models found. Pulling ${model}...`)
 
       broadcast('ollama:startup-status', {
         phase: 'pulling-model',
-        message: `Downloading AI model: ${model}...`,
+        message: `Downloading AI model (${model})... This may take a few minutes.`,
         model,
         progress: 0
       })
@@ -446,40 +479,54 @@ export async function startOllamaWithApp(): Promise<void> {
         if (total && completed) {
           percent = Math.round((completed / total) * 100)
         }
-        console.log(`[Model Pull] ${status} ${percent}%`)
         broadcast('ollama:startup-status', {
           phase: 'pulling-model',
-          message: `${status} ${percent ? percent + '%' : ''}`,
+          message: `Downloading ${model}: ${percent ? percent + '%' : status}`,
           model,
           progress: percent
         })
       })
 
-      console.log(`[Ollama] Model ${model} pulled successfully`)
+      console.log(`[Startup] Model ${model} pulled successfully`)
     }
 
     // Set active model if not already set (first launch or settings cleared)
     const finalModels = await getOllamaModels()
+    console.log('[Startup] Final models:', finalModels)
     const currentActive = getActiveModel()
     if (finalModels.length > 0 && (!currentActive || !finalModels.includes(currentActive))) {
-      // Pick the smallest available model as default for safety
       setActiveModel(finalModels[0])
-      console.log(`[Ollama] Default model set to: ${finalModels[0]}`)
+      console.log(`[Startup] Default model set to: ${finalModels[0]}`)
     }
 
-    // Warm the active model so first generation is fast
+    // Warm the active model so first generation is fast — fire and forget
     const modelToWarm = getActiveModel()
     if (modelToWarm) {
-      warmModel(modelToWarm).catch(() => {})
+      console.log(`[Startup] Warming model: ${modelToWarm}`)
+      broadcast('ollama:startup-status', { phase: 'warming-model', message: 'Loading AI model into memory...', model: modelToWarm })
+      warmModel(modelToWarm)
+        .then(() => {
+          broadcast('ollama:startup-status', { phase: 'ready', message: 'AI is ready' })
+          console.log('[Startup] AI startup complete')
+        })
+        .catch(() => {
+          // Warming failed but AI is still usable — first generation will just be slower
+          broadcast('ollama:startup-status', { phase: 'ready', message: 'AI is ready' })
+          console.log('[Startup] Warm failed, but AI is ready')
+        })
+      return // Don't broadcast ready here — the warm callback will do it
     }
 
     broadcast('ollama:startup-status', { phase: 'ready', message: 'AI is ready' })
+    console.log('[Startup] AI startup complete')
   } catch (error) {
-    console.error('[Ollama] Failed to start:', error)
+    console.error('[Startup] Failed:', error)
     broadcast('ollama:startup-status', {
       phase: 'error',
-      message: error instanceof Error ? error.message : 'Failed to start Ollama'
+      message: error instanceof Error ? error.message : 'Failed to start AI engine'
     })
+  } finally {
+    startupInProgress = false
   }
 }
 

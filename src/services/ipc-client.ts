@@ -25,7 +25,8 @@ export const ipc = {
     setConfig: (config: { provider?: string; anthropicApiKey?: string | null; anthropicModel?: string }) =>
       getApi().aiSetConfig(config) as Promise<{ success: boolean }>,
     validateKey: (apiKey: string) =>
-      getApi().aiValidateKey(apiKey) as Promise<{ valid: boolean; error?: string }>
+      getApi().aiValidateKey(apiKey) as Promise<{ valid: boolean; error?: string }>,
+    retrySetup: () => getApi().aiRetrySetup() as Promise<{ success: boolean }>
   },
   ollama: {
     status: () => getApi().ollamaStatus(),

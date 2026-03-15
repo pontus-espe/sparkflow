@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type OllamaStatus = 'not-started' | 'starting' | 'downloading-ollama' | 'pulling-model' | 'ready' | 'downloading' | 'error' | 'hardware-insufficient'
+export type OllamaStatus = 'not-started' | 'starting' | 'downloading-ollama' | 'pulling-model' | 'warming-model' | 'ready' | 'downloading' | 'error' | 'hardware-insufficient'
 export type AIProvider = 'local' | 'anthropic'
 
 export interface AIStore {

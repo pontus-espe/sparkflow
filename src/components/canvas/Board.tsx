@@ -17,7 +17,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
-import { StickyNote, Sparkles, FileSpreadsheet } from 'lucide-react'
+import { StickyNote, Sparkles, FileSpreadsheet, Plus } from 'lucide-react'
 import { nodeTypes } from './nodes'
 import { useBoardStore } from '@/stores/board-store'
 import { useMicroappStore } from '@/stores/microapp-store'
@@ -287,6 +287,11 @@ export function Board() {
     }
   }, [addDataSource, setCachedData, addNode, openCommandPalette])
 
+  const handleCreateMicroapp = useCallback(() => {
+    const center = { x: window.innerWidth / 2 - 240, y: window.innerHeight / 3 }
+    openCommandPalette(center)
+  }, [openCommandPalette])
+
   // "/" keyboard shortcut
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -296,14 +301,12 @@ export function Board() {
 
       if (e.key === '/') {
         e.preventDefault()
-        // Open at center of viewport
-        const center = { x: window.innerWidth / 2 - 240, y: window.innerHeight / 3 }
-        openCommandPalette(center)
+        handleCreateMicroapp()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [openCommandPalette])
+  }, [handleCreateMicroapp])
 
   return (
     <div className="w-full h-full">
@@ -358,6 +361,22 @@ export function Board() {
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+
+      {/* Create Microapp floating button */}
+      {!commandPalettePos && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20">
+          <button
+            onClick={handleCreateMicroapp}
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 transition-all text-sm font-medium"
+          >
+            <Plus className="h-4 w-4" />
+            New Microapp
+          </button>
+          <p className="text-center text-[10px] text-muted-foreground mt-1.5 opacity-60">
+            or press /
+          </p>
+        </div>
+      )}
 
       {/* Command Palette overlay */}
       <CommandPalette

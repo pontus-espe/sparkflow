@@ -4,6 +4,17 @@ import { is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
 import { startOllamaWithApp, stopOllamaWithApp } from './ipc/ollama-handlers'
 
+// Prevent fetch/network errors from crashing the app with an error dialog
+process.on('uncaughtException', (err) => {
+  console.error('[Uncaught]', err.message)
+  // "terminated" errors come from fetch/undici when connections drop — not fatal
+  if (err.message === 'terminated' || err.message === 'aborted') return
+  // Other errors: log but don't crash
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[Unhandled Rejection]', reason)
+})
+
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
@@ -62,8 +73,12 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   createWindow()
 
-  // Start Ollama in background — app is usable immediately
-  startOllamaWithApp()
+  // Start Ollama AFTER the renderer has loaded and can receive events
+  // This avoids the race where startup-status broadcasts fire before the listener is registered
+  mainWindow?.webContents.on('did-finish-load', () => {
+    console.log('[Main] Renderer loaded — starting Ollama setup')
+    startOllamaWithApp()
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

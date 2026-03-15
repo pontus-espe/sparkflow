@@ -46,6 +46,7 @@ const api = {
   aiSetConfig: (config: { provider?: string; anthropicApiKey?: string | null; anthropicModel?: string }) =>
     ipcRenderer.invoke('ai:set-config', config),
   aiValidateKey: (apiKey: string) => ipcRenderer.invoke('ai:validate-key', apiKey),
+  aiRetrySetup: () => ipcRenderer.invoke('ai:retry-setup'),
 
   // Data
   dataImportFile: () => ipcRenderer.invoke('data:import-file'),
