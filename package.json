@@ -2,7 +2,10 @@
   "name": "sparkflow",
   "version": "0.1.0",
   "description": "AI-Powered Microapp Canvas — Drop data, describe what you need, get a live interactive app on an infinite canvas.",
-  "author": "Pontus Espe",
+  "author": {
+    "name": "Pontus Espe",
+    "email": "pontus.wallentin.espe@gmail.com"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
