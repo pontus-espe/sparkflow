@@ -263,7 +263,7 @@ export async function warmModel(model: string): Promise<void> {
     const response = await fetch(`${OLLAMA_BASE}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, prompt: '', keep_alive: '10m' })
+      body: JSON.stringify({ model, prompt: '', keep_alive: '10m', options: { num_ctx: 8192 } })
     })
     // Consume body to complete the request
     if (response.body) {

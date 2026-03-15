@@ -24,7 +24,7 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 600,
     show: false,
-    title: 'Board',
+    title: 'SparkFlow',
     frame: false,
     icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {

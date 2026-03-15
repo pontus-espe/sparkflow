@@ -47,7 +47,7 @@ function StickyNoteNodeComponent({ id, data, selected }: NodeProps) {
         style={{ background: 'transparent', border: 'none' }}
       />
       <div
-        className="relative flex flex-col rounded-lg shadow-lg"
+        className="relative flex flex-col rounded-lg shadow-lg overflow-hidden"
         style={{
           backgroundColor: color,
           width: '100%',
@@ -71,7 +71,7 @@ function StickyNoteNodeComponent({ id, data, selected }: NodeProps) {
 
         {/* Content area */}
         <div
-          className="flex-1 px-3 pb-3 nodrag nowheel nopan"
+          className="flex-1 px-3 pb-3 overflow-auto nodrag nowheel nopan"
           onDoubleClick={handleDoubleClick}
         >
           {isEditing ? (
