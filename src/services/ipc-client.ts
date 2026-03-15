@@ -83,5 +83,10 @@ export const ipc = {
     list: () => getApi().boardList(),
     create: (name: string) => getApi().boardCreate(name),
     delete: (id: string) => getApi().boardDelete(id)
+  },
+  app: {
+    onUpdateAvailable: (cb: (info: { currentVersion: string; latestVersion: string; url: string }) => void) =>
+      getApi().onUpdateAvailable(cb),
+    openExternal: (url: string) => getApi().openExternal(url)
   }
 }

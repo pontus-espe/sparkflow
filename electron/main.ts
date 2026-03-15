@@ -3,6 +3,7 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
 import { startOllamaWithApp, stopOllamaWithApp } from './ipc/ollama-handlers'
+import { startUpdateChecker } from './ipc/update-checker'
 
 // Prevent fetch/network errors from crashing the app with an error dialog
 process.on('uncaughtException', (err) => {
@@ -71,7 +72,13 @@ app.whenReady().then(() => {
   ipcMain.handle('window:is-maximized', () => mainWindow?.isMaximized() ?? false)
 
   registerIpcHandlers()
+
+  ipcMain.handle('app:open-external', (_event, url: string) => {
+    shell.openExternal(url)
+  })
+
   createWindow()
+  startUpdateChecker()
 
   // Start Ollama AFTER the renderer has loaded and can receive events
   // This avoids the race where startup-status broadcasts fire before the listener is registered

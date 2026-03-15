@@ -107,7 +107,15 @@ const api = {
   boardLoad: (id: string) => ipcRenderer.invoke('board:load', id),
   boardList: () => ipcRenderer.invoke('board:list'),
   boardCreate: (name: string) => ipcRenderer.invoke('board:create', name),
-  boardDelete: (id: string) => ipcRenderer.invoke('board:delete', id)
+  boardDelete: (id: string) => ipcRenderer.invoke('board:delete', id),
+
+  // Updates
+  onUpdateAvailable: (callback: (info: { currentVersion: string; latestVersion: string; url: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, info: { currentVersion: string; latestVersion: string; url: string }) => callback(info)
+    ipcRenderer.on('app:update-available', handler)
+    return () => ipcRenderer.removeListener('app:update-available', handler)
+  },
+  openExternal: (url: string) => ipcRenderer.invoke('app:open-external', url)
 }
 
 contextBridge.exposeInMainWorld('api', api)

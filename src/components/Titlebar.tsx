@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Minus, Square, X, Maximize2, Plus, LayoutGrid, Search, Sun, Moon, ChevronDown, Circle, Cloud, Cpu } from 'lucide-react'
+import { Minus, Square, X, Maximize2, Plus, LayoutGrid, Search, Sun, Moon, ChevronDown, Circle, Cloud, Cpu, ArrowUpCircle } from 'lucide-react'
 import appIcon from '@/assets/icon.png'
 import { windowControls } from '@/services/ipc-client'
 import { ipc } from '@/services/ipc-client'
@@ -40,6 +40,7 @@ export function Titlebar() {
   const searchRef = useRef<HTMLInputElement>(null)
 
   const [showModelSettings, setShowModelSettings] = useState(false)
+  const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; url: string } | null>(null)
 
   const currentBoardId = useBoardStore((s) => s.currentBoardId)
   const currentBoardName = useBoardStore((s) => s.currentBoardName)
@@ -52,6 +53,13 @@ export function Titlebar() {
   useEffect(() => {
     windowControls.isMaximized().then(setMaximized)
     const cleanup = windowControls.onMaximizeChange(setMaximized)
+    return cleanup
+  }, [])
+
+  useEffect(() => {
+    const cleanup = ipc.app.onUpdateAvailable((info) => {
+      setUpdateInfo({ latestVersion: info.latestVersion, url: info.url })
+    })
     return cleanup
   }, [])
 
@@ -331,6 +339,21 @@ export function Titlebar() {
 
         {/* AI selector + Theme toggle + window controls */}
         <div className="flex items-center h-full shrink-0">
+          {/* Update available */}
+          {updateInfo && (
+            <>
+              <button
+                onClick={() => ipc.app.openExternal(updateInfo.url)}
+                className="h-full px-2.5 flex items-center gap-1.5 hover:bg-muted transition-colors text-xs text-green-500 hover:text-green-400"
+                tabIndex={-1}
+                title={`Update to v${updateInfo.latestVersion}`}
+              >
+                <ArrowUpCircle className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">v{updateInfo.latestVersion}</span>
+              </button>
+              <div className="w-px h-3.5 bg-border/50" />
+            </>
+          )}
           {/* AI model selector */}
           <button
             onClick={() => setShowModelSettings((v) => !v)}
