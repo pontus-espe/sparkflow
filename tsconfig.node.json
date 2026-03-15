@@ -9,7 +9,8 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true
+    "composite": true,
+    "outDir": "./out/node"
   },
   "include": ["electron-vite.config.ts"]
 }
