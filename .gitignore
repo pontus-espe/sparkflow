@@ -1,0 +1,32 @@
+node_modules/
+out/
+dist-electron/
+*.db
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+*.tsbuildinfo
+
+# Archives
+*.zip
+
+# Claude Code
+.claude/

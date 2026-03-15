@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-background: oklch(0.145 0 0);
+  --color-foreground: oklch(0.985 0 0);
+  --color-card: oklch(0.17 0 0);
+  --color-card-foreground: oklch(0.985 0 0);
+  --color-popover: oklch(0.17 0 0);
+  --color-popover-foreground: oklch(0.985 0 0);
+  --color-primary: oklch(0.75 0.15 250);
+  --color-primary-foreground: oklch(0.15 0.02 250);
+  --color-secondary: oklch(0.25 0 0);
+  --color-secondary-foreground: oklch(0.985 0 0);
+  --color-muted: oklch(0.22 0 0);
+  --color-muted-foreground: oklch(0.65 0 0);
+  --color-accent: oklch(0.25 0 0);
+  --color-accent-foreground: oklch(0.985 0 0);
+  --color-destructive: oklch(0.55 0.2 25);
+  --color-destructive-foreground: oklch(0.985 0 0);
+  --color-border: oklch(0.3 0 0);
+  --color-input: oklch(0.3 0 0);
+  --color-ring: oklch(0.75 0.15 250);
+  --color-chart-1: oklch(0.75 0.15 250);
+  --color-chart-2: oklch(0.7 0.15 160);
+  --color-chart-3: oklch(0.7 0.15 50);
+  --color-chart-4: oklch(0.7 0.15 300);
+  --color-chart-5: oklch(0.7 0.15 100);
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+
+  --color-sidebar-background: oklch(0.16 0 0);
+  --color-sidebar-foreground: oklch(0.985 0 0);
+  --color-sidebar-primary: oklch(0.75 0.15 250);
+  --color-sidebar-primary-foreground: oklch(0.15 0.02 250);
+  --color-sidebar-accent: oklch(0.25 0 0);
+  --color-sidebar-accent-foreground: oklch(0.985 0 0);
+  --color-sidebar-border: oklch(0.3 0 0);
+  --color-sidebar-ring: oklch(0.75 0.15 250);
+
+  --color-sticky-yellow: oklch(0.85 0.15 85);
+  --color-sticky-blue: oklch(0.8 0.12 240);
+  --color-sticky-green: oklch(0.82 0.12 155);
+  --color-sticky-pink: oklch(0.8 0.12 350);
+  --color-sticky-purple: oklch(0.78 0.12 300);
+}
+
+/* Light theme overrides — html.light for specificity over @layer theme :root */
+html.light {
+  --color-background: oklch(0.985 0 0);
+  --color-foreground: oklch(0.145 0 0);
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.145 0 0);
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.145 0 0);
+  --color-primary: oklch(0.55 0.18 250);
+  --color-primary-foreground: oklch(0.985 0 0);
+  --color-secondary: oklch(0.94 0 0);
+  --color-secondary-foreground: oklch(0.2 0 0);
+  --color-muted: oklch(0.94 0 0);
+  --color-muted-foreground: oklch(0.45 0 0);
+  --color-accent: oklch(0.94 0 0);
+  --color-accent-foreground: oklch(0.2 0 0);
+  --color-destructive: oklch(0.55 0.2 25);
+  --color-destructive-foreground: oklch(0.985 0 0);
+  --color-border: oklch(0.88 0 0);
+  --color-input: oklch(0.88 0 0);
+  --color-ring: oklch(0.55 0.18 250);
+  --color-sidebar-background: oklch(0.97 0 0);
+  --color-sidebar-foreground: oklch(0.145 0 0);
+  --color-sidebar-primary: oklch(0.55 0.18 250);
+  --color-sidebar-primary-foreground: oklch(0.985 0 0);
+  --color-sidebar-accent: oklch(0.94 0 0);
+  --color-sidebar-accent-foreground: oklch(0.2 0 0);
+  --color-sidebar-border: oklch(0.88 0 0);
+  --color-sidebar-ring: oklch(0.55 0.18 250);
+  --color-sticky-yellow: oklch(0.92 0.12 85);
+  --color-sticky-blue: oklch(0.88 0.1 240);
+  --color-sticky-green: oklch(0.9 0.1 155);
+  --color-sticky-pink: oklch(0.88 0.1 350);
+  --color-sticky-purple: oklch(0.86 0.1 300);
+}
+
+html.light *::-webkit-scrollbar-thumb {
+  background: oklch(0.78 0 0);
+}
+
+html.light *::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.65 0 0);
+}
+
+html.light * {
+  scrollbar-color: oklch(0.78 0 0) transparent;
+}
+
+/* React Flow overrides */
+.react-flow__background {
+  background-color: var(--color-background) !important;
+}
+
+.react-flow__minimap {
+  background-color: var(--color-card) !important;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+}
+
+.react-flow__controls {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background-color: var(--color-card) !important;
+  border-bottom-color: var(--color-border) !important;
+  fill: var(--color-foreground) !important;
+}
+
+.react-flow__controls-button:hover {
+  background-color: var(--color-accent) !important;
+}
+
+/* Selection styling */
+.react-flow__selection {
+  border: 1px solid var(--color-primary) !important;
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent) !important;
+}
+
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+
+.app-drag-region button,
+.app-drag-region a,
+.app-drag-region input {
+  -webkit-app-region: no-drag;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* Custom scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.35 0 0) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: oklch(0.3 0 0);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.4 0 0);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
