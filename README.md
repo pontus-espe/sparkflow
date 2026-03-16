@@ -5,8 +5,7 @@
 <h1 align="center">SparkFlow</h1>
 
 <p align="center">
-  <strong>AI-Powered Microapp Canvas</strong><br>
-  Drop data, describe what you need, get a live interactive app on an infinite canvas.
+  <strong>Turn your data into interactive apps — just describe what you need.</strong>
 </p>
 
 <p align="center">
@@ -22,31 +21,33 @@
 
 ## What is SparkFlow?
 
-SparkFlow is a desktop app that combines an infinite canvas with AI-generated micro-applications. Drag in your data (Excel, CSV), describe what you want in plain language, and SparkFlow generates a fully interactive app — dashboards, kanban boards, data tables, analytics tools, and more — right on your canvas.
+SparkFlow is a desktop app that lets you drop in your data — Excel spreadsheets, CSV files — and describe in plain language what you want to do with it. SparkFlow's AI then builds a fully interactive app right on an infinite canvas: dashboards, kanban boards, data tables, analytics tools, and more.
 
-### Key Features
+Think of it as a mix between **Miro** and **Notion**, where every card on the canvas is a live, working application tailored to your data.
 
-- **AI-Generated Microapps** — Describe what you need, get a working React app in seconds
-- **Infinite Canvas** — Arrange, resize, and connect multiple apps freely
-- **Live Data Sources** — Import Excel/CSV files with automatic column detection and live file watching
-- **Mutable Data** — Microapps can read and write back to data sources
-- **Built-in Charts** — Bar, line, area, and pie charts auto-adapt to your data
-- **Persistent Storage** — Microapp state, tables, and data survive restarts
-- **File Operations** — Microapps can read/write files through native OS dialogs
-- **Notifications** — Toast system for user feedback
-- **Multiple Boards** — Organize work across tabbed boards
-- **Light/Dark Mode** — System-aware with manual toggle
-- **Local-first AI** — Runs Ollama locally, or connect to Anthropic's API
-- **Frameless Window** — Custom titlebar with board tabs
+### What you can do
 
-## Getting Started
+- **Drop in data, get an app** — Import an Excel or CSV file, describe what you need ("make a bar chart of sales by region", "build a kanban board from this task list"), and get a working app in seconds.
+- **Arrange everything on a canvas** — Lay out multiple apps side by side, resize them, and organize your workspace freely on an infinite canvas.
+- **Apps that update with your data** — SparkFlow watches your files for changes and apps update automatically. Apps can also write data back.
+- **Charts, tables, and more** — Built-in bar, line, area, and pie charts that adapt to your data automatically.
+- **Works across boards** — Create separate boards for different projects using the tabbed interface.
+- **Runs locally and privately** — AI runs on your machine via Ollama. No data leaves your computer. Optionally connect Anthropic's API for more powerful models.
+- **Light and dark mode** — Follows your system theme or toggle manually.
 
-### Prerequisites
+## Download
 
-- [Node.js](https://nodejs.org/) 18+
-- [Git](https://git-scm.com/)
+Head to the [**Releases page**](https://github.com/pontus-espe/sparkflow/releases/latest) and download the installer for your platform:
 
-### Install & Run
+| Platform | File |
+|----------|------|
+| **Windows** | `SparkFlow-Setup-x.x.x.exe` (installer) or `SparkFlow-x.x.x.exe` (portable) |
+| **macOS** | `SparkFlow-x.x.x.dmg` |
+| **Linux** | `SparkFlow-x.x.x.AppImage` or `.deb` |
+
+## Building from Source
+
+If you'd like to run SparkFlow from source or contribute:
 
 ```bash
 git clone https://github.com/pontus-espe/sparkflow.git
@@ -55,14 +56,10 @@ npm install
 npm run dev
 ```
 
-### Build for Production
+To package a distributable:
 
 ```bash
-# Build the renderer + main process
-npm run build
-
-# Package as a distributable (output in dist-electron/)
-npm run pack
+npm run dist
 ```
 
 ## Architecture
