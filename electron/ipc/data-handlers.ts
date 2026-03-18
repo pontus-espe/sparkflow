@@ -1,9 +1,9 @@
 import { ipcMain, dialog } from 'electron'
 import { randomUUID } from 'crypto'
-import { readFileSync, writeFileSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { extname, basename } from 'path'
-import { parseFile } from '../data/file-parser'
-import { watchFileForSource, unwatchSource } from '../data/file-watcher'
+import { parseFile, writeFile } from '../data/file-parser'
+import { watchFileForSource, unwatchSource, suppressWatcher } from '../data/file-watcher'
 import {
   saveDataSource,
   getDataSources,
@@ -16,7 +16,7 @@ import {
   getMicroapps
 } from '../data/database'
 
-async function importFileFromPath(filePath: string) {
+async function importFileFromPath(filePath: string, boardId: string) {
   const parsed = parseFile(filePath)
   const sources = []
   const sourceIds: string[] = []
@@ -25,14 +25,15 @@ async function importFileFromPath(filePath: string) {
   for (const data of parsed) {
     const id = randomUUID()
     sourceIds.push(id)
+    // File-backed sources: only store metadata in DB, not row data
     await saveDataSource(
       id,
-      'default',
+      boardId,
       data.name,
       fileType,
       JSON.stringify(data.columns),
       data.rows.length,
-      JSON.stringify(data.rows),
+      '[]',
       filePath
     )
     sources.push({
@@ -41,15 +42,38 @@ async function importFileFromPath(filePath: string) {
       type: fileType,
       columns: data.columns,
       rowCount: data.rows.length,
-      rows: data.rows
+      rows: data.rows,
+      filePath
     })
   }
 
   return { sources, sourceIds }
 }
 
+/** For a file-backed source, re-parse the file to get fresh data */
+function readFileSource(source: Record<string, unknown>) {
+  const filePath = source.file_path as string
+  if (!filePath || !existsSync(filePath)) return null
+  try {
+    const parsed = parseFile(filePath)
+    // Find the matching sheet by index (sources are created in order)
+    // For CSV there's always one sheet; for Excel, we match by name
+    const name = source.name as string
+    const match = parsed.find((p) => p.name === name) || parsed[0]
+    if (!match) return null
+    return {
+      columns: match.columns,
+      rows: match.rows,
+      rowCount: match.rows.length
+    }
+  } catch (err) {
+    console.warn('[data] Failed to read file source', filePath, err)
+    return null
+  }
+}
+
 export function registerDataHandlers(): void {
-  ipcMain.handle('data:import-file', async () => {
+  ipcMain.handle('data:import-file', async (_event, boardId: string) => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [
@@ -63,7 +87,7 @@ export function registerDataHandlers(): void {
 
     try {
       const filePath = result.filePaths[0]
-      const { sources, sourceIds } = await importFileFromPath(filePath)
+      const { sources, sourceIds } = await importFileFromPath(filePath, boardId)
       watchFileForSource(filePath, sourceIds)
       return { sources }
     } catch (error) {
@@ -71,9 +95,9 @@ export function registerDataHandlers(): void {
     }
   })
 
-  ipcMain.handle('data:import-file-path', async (_event, filePath: string) => {
+  ipcMain.handle('data:import-file-path', async (_event, filePath: string, boardId: string) => {
     try {
-      const { sources, sourceIds } = await importFileFromPath(filePath)
+      const { sources, sourceIds } = await importFileFromPath(filePath, boardId)
       watchFileForSource(filePath, sourceIds)
       return { sources }
     } catch (error) {
@@ -86,6 +110,14 @@ export function registerDataHandlers(): void {
       const source = await getDataSource(sourceId)
       if (!source) return { error: 'Data source not found' }
 
+      // File-backed: always read from file
+      if (source.file_path) {
+        const fresh = readFileSource(source)
+        if (fresh) return fresh
+        return { error: 'File not found or unreadable' }
+      }
+
+      // Manual source: read from DB
       return {
         columns: JSON.parse(source.columns_def as string),
         rows: JSON.parse(source.data as string),
@@ -138,16 +170,30 @@ export function registerDataHandlers(): void {
       const source = await getDataSource(sourceId)
       if (!source) return { error: 'Data source not found' }
 
-      await saveDataSource(
-        sourceId,
-        source.board_id as string,
-        source.name as string,
-        source.type as string,
-        source.columns_def as string,
-        rows.length,
-        JSON.stringify(rows),
-        (source.file_path as string) || undefined
-      )
+      const filePath = source.file_path as string | null
+
+      if (filePath) {
+        // File-backed: write to file (the source of truth), don't store rows in DB
+        try {
+          suppressWatcher(filePath)
+          writeFile(filePath, rows)
+        } catch (err) {
+          console.warn('[data:update-rows] Failed to write back to file:', err)
+          return { error: 'Failed to write to file' }
+        }
+      } else {
+        // Manual source: store rows in DB
+        await saveDataSource(
+          sourceId,
+          source.board_id as string,
+          source.name as string,
+          source.type as string,
+          source.columns_def as string,
+          rows.length,
+          JSON.stringify(rows)
+        )
+      }
+
       return { success: true }
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Failed to update rows' }
@@ -365,17 +411,36 @@ export function registerBoardHandlers(): void {
       const microapps = await getMicroapps(id)
       const dataSources = await getDataSources(id)
 
+      // Re-establish file watchers for data sources that have file paths
+      for (const s of dataSources) {
+        if (s.file_path) {
+          watchFileForSource(s.file_path as string, [s.id as string])
+        }
+      }
+
       return {
         ...board,
         microapps: microapps.map((m) => ({
           ...m,
           state: JSON.parse(m.state as string || '{}')
         })),
-        dataSources: dataSources.map((s) => ({
-          ...s,
-          columns_def: JSON.parse(s.columns_def as string || '[]'),
-          data: JSON.parse(s.data as string || '[]')
-        }))
+        dataSources: dataSources.map((s) => {
+          // File-backed: parse the file fresh — it's the source of truth
+          if (s.file_path) {
+            const fresh = readFileSource(s)
+            return {
+              ...s,
+              columns_def: fresh?.columns ?? JSON.parse(s.columns_def as string || '[]'),
+              data: fresh?.rows ?? []
+            }
+          }
+          // Manual source: read from DB
+          return {
+            ...s,
+            columns_def: JSON.parse(s.columns_def as string || '[]'),
+            data: JSON.parse(s.data as string || '[]')
+          }
+        })
       }
     } catch (error) {
       return null
@@ -398,6 +463,12 @@ export function registerBoardHandlers(): void {
 
   ipcMain.handle('board:delete', async (_event, id: string) => {
     // For now, just acknowledge
+    return { success: true }
+  })
+
+  ipcMain.handle('board:reset', async () => {
+    const { resetDatabase } = await import('../data/database')
+    await resetDatabase()
     return { success: true }
   })
 }

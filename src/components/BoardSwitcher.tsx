@@ -125,6 +125,7 @@ export function BoardSwitcher() {
               type: s.type as 'excel' | 'csv' | 'manual',
               columns: s.columns_def as { name: string; type: 'text' | 'number' | 'date' | 'boolean' }[],
               rowCount: s.row_count as number,
+              filePath: (s.file_path as string) || undefined,
               config: {},
               createdAt: s.created_at as number,
               updatedAt: s.updated_at as number

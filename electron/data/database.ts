@@ -120,6 +120,18 @@ export function saveDatabase(): void {
   writeFileSync(getDbPath(), buffer)
 }
 
+export async function resetDatabase(): Promise<void> {
+  if (db) {
+    db.close()
+    db = null
+  }
+  const dbPath = getDbPath()
+  if (existsSync(dbPath)) {
+    const { unlinkSync } = await import('fs')
+    unlinkSync(dbPath)
+  }
+}
+
 // Board CRUD
 export async function saveBoard(
   id: string,

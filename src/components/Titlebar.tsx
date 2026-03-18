@@ -1,15 +1,27 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Minus, Square, X, Maximize2, Plus, LayoutGrid, Search, Sun, Moon, ChevronDown, Circle, Cloud, Cpu, ArrowUpCircle } from 'lucide-react'
+import { Minus, Square, X, Maximize2, Plus, LayoutGrid, Search, Sun, Moon, ChevronDown, Circle, Cloud, Cpu, ArrowUpCircle, RotateCcw, Globe } from 'lucide-react'
 import appIcon from '@/assets/icon.png'
 import { windowControls } from '@/services/ipc-client'
 import { ipc } from '@/services/ipc-client'
 import { useBoardStore, type BoardInfo } from '@/stores/board-store'
 import { useMicroappStore } from '@/stores/microapp-store'
 import { useDataStore } from '@/stores/data-store'
-import { useAIStore } from '@/stores/ai-store'
+import { useAIStore, LANGUAGES } from '@/stores/ai-store'
 import { ModelSettings } from '@/components/ai/ModelSettings'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/lib/i18n'
 import type { MicroappIcon, MicroappColor } from '@/types/microapp'
+
+const ANTHROPIC_MODEL_NAMES: Record<string, string> = {
+  'claude-sonnet-4-6': 'Sonnet 4.6',
+  'claude-opus-4-6': 'Opus 4.6',
+  'claude-haiku-4-5-20251001': 'Haiku 4.5'
+}
+
+function formatAnthropicModel(modelId: string | null): string {
+  if (!modelId) return 'Anthropic'
+  return ANTHROPIC_MODEL_NAMES[modelId] || modelId.replace('claude-', '').replace(/-\d{8}$/, '')
+}
 
 // Track which boards have open tabs
 interface TabInfo {
@@ -29,27 +41,48 @@ function applyTheme(mode: ThemeMode) {
 }
 
 export function Titlebar() {
+  const { t } = useTranslation()
   const [maximized, setMaximized] = useState(false)
   const [theme, setTheme] = useState<ThemeMode>(() => {
     return (localStorage.getItem('board-theme') as ThemeMode) || 'system'
   })
-  const [openTabs, setOpenTabs] = useState<TabInfo[]>([])
+  const [openTabs, setOpenTabs] = useState<TabInfo[]>(() => {
+    try {
+      const saved = localStorage.getItem('board-open-tabs')
+      if (saved) {
+        const parsed = JSON.parse(saved) as TabInfo[]
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch { /* ignore */ }
+    return []
+  })
   const [showPicker, setShowPicker] = useState(false)
   const [allBoards, setAllBoards] = useState<BoardInfo[]>([])
+  const dragTabRef = useRef<string | null>(null)
+  const [dragOverTabId, setDragOverTabId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const pickerRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
   const [showModelSettings, setShowModelSettings] = useState(false)
+  const [showLangMenu, setShowLangMenu] = useState(false)
+  const langMenuRef = useRef<HTMLDivElement>(null)
   const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; url: string } | null>(null)
+
+  const [editingTabId, setEditingTabId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+  const editInputRef = useRef<HTMLInputElement>(null)
 
   const currentBoardId = useBoardStore((s) => s.currentBoardId)
   const currentBoardName = useBoardStore((s) => s.currentBoardName)
+  const setCurrentBoardName = useBoardStore((s) => s.setCurrentBoardName)
   const setBoardList = useBoardStore((s) => s.setBoardList)
 
   const aiStatus = useAIStore((s) => s.status)
   const aiProvider = useAIStore((s) => s.provider)
   const aiModel = useAIStore((s) => s.model)
+  const language = useAIStore((s) => s.language)
+  const setLanguage = useAIStore((s) => s.setLanguage)
 
   useEffect(() => {
     windowControls.isMaximized().then(setMaximized)
@@ -89,20 +122,35 @@ export function Titlebar() {
     })
   }, [])
 
-  // Initialize the first tab on mount
+  // Persist open tabs to localStorage
   useEffect(() => {
+    if (openTabs.length > 0 && openTabs[0].id) {
+      localStorage.setItem('board-open-tabs', JSON.stringify(openTabs))
+    }
+  }, [openTabs])
+
+
+  // Ensure the current board always has a tab, and keep its name in sync
+  useEffect(() => {
+    if (!currentBoardId) return
     setOpenTabs((tabs) => {
-      if (tabs.length === 0) return [{ id: currentBoardId, name: currentBoardName }]
-      return tabs
+      const exists = tabs.some((t) => t.id === currentBoardId)
+      if (!exists) return [...tabs, { id: currentBoardId, name: currentBoardName }]
+      return tabs.map((t) => (t.id === currentBoardId ? { ...t, name: currentBoardName } : t))
     })
   }, [currentBoardId, currentBoardName])
 
-  // Keep current tab name in sync
+  // Close language menu on click outside
   useEffect(() => {
-    setOpenTabs((tabs) =>
-      tabs.map((t) => (t.id === currentBoardId ? { ...t, name: currentBoardName } : t))
-    )
-  }, [currentBoardId, currentBoardName])
+    if (!showLangMenu) return
+    const handle = (e: MouseEvent) => {
+      if (langMenuRef.current && !langMenuRef.current.contains(e.target as Node)) {
+        setShowLangMenu(false)
+      }
+    }
+    const raf = requestAnimationFrame(() => document.addEventListener('mousedown', handle))
+    return () => { cancelAnimationFrame(raf); document.removeEventListener('mousedown', handle) }
+  }, [showLangMenu])
 
   const refreshBoards = useCallback(async () => {
     const boards = await ipc.board.list()
@@ -142,6 +190,7 @@ export function Titlebar() {
   const loadBoard = useCallback(async (boardId: string, boardName: string) => {
     if (boardId === currentBoardId) return
 
+    localStorage.setItem('board-active-id', boardId)
     await saveCurrentBoard()
 
     const microappStore = useMicroappStore.getState()
@@ -195,6 +244,7 @@ export function Titlebar() {
             type: s.type as 'excel' | 'csv' | 'manual',
             columns: s.columns_def as { name: string; type: 'text' | 'number' | 'date' | 'boolean' }[],
             rowCount: s.row_count as number,
+            filePath: (s.file_path as string) || undefined,
             config: {},
             createdAt: s.created_at as number,
             updatedAt: s.updated_at as number
@@ -215,6 +265,16 @@ export function Titlebar() {
     }
   }, [currentBoardId, saveCurrentBoard])
 
+  // Agent-triggered board navigation
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { boardId, boardName } = (e as CustomEvent).detail
+      loadBoard(boardId, boardName)
+    }
+    window.addEventListener('agent:navigate-board', handler)
+    return () => window.removeEventListener('agent:navigate-board', handler)
+  }, [loadBoard])
+
   const handleTabClick = useCallback((tab: TabInfo) => {
     loadBoard(tab.id, tab.name)
   }, [loadBoard])
@@ -234,6 +294,36 @@ export function Titlebar() {
       return remaining
     })
   }, [currentBoardId, loadBoard])
+
+  const handleTabDoubleClick = useCallback((tab: TabInfo) => {
+    setEditingTabId(tab.id)
+    setEditingName(tab.name)
+    setTimeout(() => editInputRef.current?.select(), 0)
+  }, [])
+
+  const handleRenameSubmit = useCallback(() => {
+    const trimmed = editingName.trim()
+    if (editingTabId && trimmed && trimmed !== '') {
+      setOpenTabs((tabs) =>
+        tabs.map((t) => (t.id === editingTabId ? { ...t, name: trimmed } : t))
+      )
+      if (editingTabId === currentBoardId) {
+        setCurrentBoardName(trimmed)
+        // Persist to database
+        setTimeout(() => saveCurrentBoard(), 0)
+      }
+    }
+    setEditingTabId(null)
+  }, [editingTabId, editingName, currentBoardId, setCurrentBoardName, saveCurrentBoard])
+
+  const handleRenameKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleRenameSubmit()
+    } else if (e.key === 'Escape') {
+      setEditingTabId(null)
+    }
+  }, [handleRenameSubmit])
 
   const handleOpenPicker = useCallback(async () => {
     await refreshBoards()
@@ -261,6 +351,7 @@ export function Titlebar() {
       const dataStore = useDataStore.getState()
       Object.keys(dataStore.sources).forEach((sid) => dataStore.removeSource(sid))
 
+      localStorage.setItem('board-active-id', result.id)
       useBoardStore.setState({
         currentBoardId: result.id,
         currentBoardName: result.name,
@@ -270,6 +361,11 @@ export function Titlebar() {
       })
       setOpenTabs((tabs) => [...tabs, { id: result.id, name: result.name }])
       await refreshBoards()
+
+      // Immediately enter rename mode on the new tab
+      setEditingTabId(result.id)
+      setEditingName(result.name)
+      setTimeout(() => editInputRef.current?.select(), 0)
     }
     setShowPicker(false)
   }, [saveCurrentBoard, refreshBoards])
@@ -293,10 +389,10 @@ export function Titlebar() {
 
   return (
     <>
-      <div className="titlebar flex items-center h-8 bg-background border-b border-border select-none shrink-0">
+      <div className="titlebar flex items-center h-9 bg-background border-b border-border select-none shrink-0">
         {/* App icon */}
-        <div className="flex items-center justify-center h-full w-8 shrink-0 border-r border-border/50">
-          <img src={appIcon} alt="Board" className="h-4 w-4 rounded-sm" draggable={false} />
+        <div className="flex items-center justify-center h-full w-9 shrink-0 border-r border-border/50">
+          <img src={appIcon} alt="Board" className="h-5 w-5 rounded-sm" draggable={false} />
         </div>
 
         {/* Tabs */}
@@ -304,17 +400,62 @@ export function Titlebar() {
           {openTabs.map((tab) => (
             <button
               key={tab.id}
+              draggable={editingTabId !== tab.id}
+              onDragStart={(e) => {
+                dragTabRef.current = tab.id
+                e.dataTransfer.effectAllowed = 'move'
+              }}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                if (dragTabRef.current && dragTabRef.current !== tab.id) {
+                  setDragOverTabId(tab.id)
+                }
+              }}
+              onDragLeave={() => setDragOverTabId(null)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragOverTabId(null)
+                const fromId = dragTabRef.current
+                dragTabRef.current = null
+                if (!fromId || fromId === tab.id) return
+                setOpenTabs((tabs) => {
+                  const fromIdx = tabs.findIndex((t) => t.id === fromId)
+                  const toIdx = tabs.findIndex((t) => t.id === tab.id)
+                  if (fromIdx === -1 || toIdx === -1) return tabs
+                  const reordered = [...tabs]
+                  const [moved] = reordered.splice(fromIdx, 1)
+                  reordered.splice(toIdx, 0, moved)
+                  return reordered
+                })
+              }}
+              onDragEnd={() => { dragTabRef.current = null; setDragOverTabId(null) }}
               onClick={() => handleTabClick(tab)}
+              onDoubleClick={() => handleTabDoubleClick(tab)}
               className={cn(
                 'group flex items-center gap-1.5 h-full px-3 text-xs border-r border-border/50 transition-colors shrink-0 max-w-44',
                 tab.id === currentBoardId
                   ? 'bg-card text-foreground'
-                  : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+                  : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground',
+                dragOverTabId === tab.id && 'border-l-2 border-l-primary'
               )}
             >
               <LayoutGrid className="h-2.5 w-2.5 shrink-0" />
-              <span className="truncate">{tab.name}</span>
-              {openTabs.length > 1 && (
+              {editingTabId === tab.id ? (
+                <input
+                  ref={editInputRef}
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onBlur={handleRenameSubmit}
+                  onKeyDown={handleRenameKeyDown}
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-transparent outline-none border-b border-primary text-xs w-24"
+                  autoFocus
+                />
+              ) : (
+                <span className="truncate">{tab.name}</span>
+              )}
+              {openTabs.length > 1 && editingTabId !== tab.id && (
                 <span
                   onClick={(e) => handleCloseTab(e, tab.id)}
                   className="ml-0.5 shrink-0 rounded-sm p-0.5 opacity-0 group-hover:opacity-100 hover:bg-muted transition-all"
@@ -325,10 +466,34 @@ export function Titlebar() {
             </button>
           ))}
 
-          {/* Add tab button */}
+          {/* Add tab button — also acts as drop zone for end position */}
           <button
             onClick={handleOpenPicker}
-            className="flex items-center justify-center h-full px-2 text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors shrink-0"
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+              if (dragTabRef.current) setDragOverTabId('__end')
+            }}
+            onDragLeave={() => setDragOverTabId(null)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragOverTabId(null)
+              const fromId = dragTabRef.current
+              dragTabRef.current = null
+              if (!fromId) return
+              setOpenTabs((tabs) => {
+                const fromIdx = tabs.findIndex((t) => t.id === fromId)
+                if (fromIdx === -1) return tabs
+                const reordered = [...tabs]
+                const [moved] = reordered.splice(fromIdx, 1)
+                reordered.push(moved)
+                return reordered
+              })
+            }}
+            className={cn(
+              'flex items-center justify-center h-full px-2 text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors shrink-0',
+              dragOverTabId === '__end' && 'border-l-2 border-l-primary'
+            )}
             title="Open board"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -339,26 +504,40 @@ export function Titlebar() {
         <div className="flex-1 h-full app-drag-region" />
 
         {/* AI selector + Theme toggle + window controls */}
-        <div className="flex items-center h-full shrink-0">
+        <div className="flex items-center h-full shrink-0 gap-1 px-1.5">
           {/* Update available */}
           {updateInfo && (
-            <>
-              <button
-                onClick={() => ipc.app.openExternal(updateInfo.url)}
-                className="h-full px-2.5 flex items-center gap-1.5 hover:bg-muted transition-colors text-xs text-green-500 hover:text-green-400"
-                tabIndex={-1}
-                title={`Update to v${updateInfo.latestVersion}`}
-              >
-                <ArrowUpCircle className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">v{updateInfo.latestVersion}</span>
-              </button>
-              <div className="w-px h-3.5 bg-border/50" />
-            </>
+            <button
+              onClick={() => ipc.app.openExternal(updateInfo.url)}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted transition-colors text-xs text-green-500 hover:text-green-400"
+              tabIndex={-1}
+              title={t('update.available', { version: updateInfo.latestVersion })}
+            >
+              <ArrowUpCircle className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">v{updateInfo.latestVersion}</span>
+            </button>
+          )}
+          {/* Dev: reset data */}
+          {import.meta.env.DEV && (
+            <button
+              onClick={async () => {
+                await ipc.board.reset()
+                setOpenTabs([])
+                localStorage.removeItem('board-active-id')
+                localStorage.removeItem('board-open-tabs')
+                window.location.reload()
+              }}
+              className="flex items-center justify-center p-1.5 rounded-lg hover:bg-red-500/20 transition-colors text-muted-foreground hover:text-red-400"
+              tabIndex={-1}
+              title={t('board.resetDev')}
+            >
+              <RotateCcw className="h-3 w-3" />
+            </button>
           )}
           {/* AI model selector */}
           <button
             onClick={() => setShowModelSettings((v) => !v)}
-            className="h-full px-2.5 flex items-center gap-1.5 hover:bg-muted transition-colors text-xs text-muted-foreground hover:text-foreground"
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted transition-colors text-xs text-muted-foreground hover:text-foreground"
             tabIndex={-1}
           >
             <Circle className={cn('h-1.5 w-1.5 fill-current', {
@@ -375,22 +554,59 @@ export function Titlebar() {
             )}
             <span className="max-w-28 truncate">
               {aiStatus !== 'ready'
-                ? 'AI'
+                ? t('ai.label')
                 : aiProvider === 'anthropic'
-                  ? (aiModel || 'Anthropic').replace('claude-', '').split('-202')[0]
+                  ? formatAnthropicModel(aiModel)
                   : (aiModel || 'Local').split(':')[0]
               }
             </span>
             <ChevronDown className="h-2.5 w-2.5 opacity-50" />
           </button>
-          <div className="w-px h-3.5 bg-border/50" />
+
+          {/* Language selector */}
+          <div className="relative">
+            <button
+              onClick={() => setShowLangMenu((v) => !v)}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted transition-colors text-xs text-muted-foreground hover:text-foreground"
+              tabIndex={-1}
+              title={t('settings.language')}
+            >
+              <Globe className="h-3.5 w-3.5" />
+              <span>{LANGUAGES.find((l) => l.id === language)?.flag}</span>
+            </button>
+            {showLangMenu && (
+              <div
+                ref={langMenuRef}
+                className="absolute top-full right-0 mt-1 z-50 w-36 rounded-lg border bg-popover shadow-xl py-1"
+              >
+                {LANGUAGES.map((lang) => {
+                  const isActive = language === lang.id
+                  return (
+                    <button
+                      key={lang.id}
+                      onClick={() => { setLanguage(lang.id); setShowLangMenu(false) }}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors',
+                        isActive
+                          ? 'bg-accent text-accent-foreground'
+                          : 'hover:bg-accent/50 text-foreground'
+                      )}
+                    >
+                      <span>{lang.flag}</span>
+                      <span>{lang.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
-            className="h-full px-2 flex items-center justify-center hover:bg-muted transition-colors"
+            className="flex items-center justify-center p-1.5 rounded-lg hover:bg-muted transition-colors"
             tabIndex={-1}
-            title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={isDark ? t('theme.light') : t('theme.dark')}
           >
             <div className={cn(
               'relative w-8 h-4 rounded-full transition-colors duration-200',
@@ -408,17 +624,20 @@ export function Titlebar() {
               </div>
             </div>
           </button>
-          <div className="w-px h-3.5 bg-border/50" />
+
+          <div className="w-px h-3.5 bg-border/50 mx-0.5" />
+
+          {/* Window controls — keep rectangular, these are OS-standard */}
           <button
             onClick={() => windowControls.minimize()}
-            className="h-full px-3.5 flex items-center justify-center hover:bg-muted transition-colors"
+            className="flex items-center justify-center p-1.5 rounded-lg hover:bg-muted transition-colors"
             tabIndex={-1}
           >
             <Minus className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
           <button
             onClick={() => windowControls.maximize()}
-            className="h-full px-3.5 flex items-center justify-center hover:bg-muted transition-colors"
+            className="flex items-center justify-center p-1.5 rounded-lg hover:bg-muted transition-colors"
             tabIndex={-1}
           >
             {maximized ? (
@@ -429,7 +648,7 @@ export function Titlebar() {
           </button>
           <button
             onClick={() => windowControls.close()}
-            className="h-full px-3.5 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors"
+            className="flex items-center justify-center p-1.5 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
             tabIndex={-1}
           >
             <X className="h-3.5 w-3.5" />
@@ -442,7 +661,7 @@ export function Titlebar() {
 
       {/* Board picker overlay */}
       {showPicker && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/40">
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/40 backdrop-blur-sm">
           <div ref={pickerRef} className="w-96 rounded-xl border bg-card shadow-2xl overflow-hidden">
             {/* Search */}
             <div className="flex items-center gap-2 px-4 py-3 border-b">
@@ -451,7 +670,7 @@ export function Titlebar() {
                 ref={searchRef}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search boards..."
+                placeholder={t('board.search')}
                 className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
             </div>
@@ -459,7 +678,7 @@ export function Titlebar() {
             {/* Board list */}
             <div className="max-h-72 overflow-auto py-1">
               {filteredBoards.length === 0 && (
-                <p className="px-4 py-6 text-center text-xs text-muted-foreground">No boards found</p>
+                <p className="px-4 py-6 text-center text-xs text-muted-foreground">{t('board.noBoards')}</p>
               )}
               {filteredBoards.map((board) => (
                 <button
@@ -473,7 +692,7 @@ export function Titlebar() {
                   <LayoutGrid className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate flex-1">{board.name}</span>
                   {openTabIds.has(board.id) && (
-                    <span className="text-[10px] text-muted-foreground">open</span>
+                    <span className="text-[10px] text-muted-foreground">{t('board.open.badge')}</span>
                   )}
                 </button>
               ))}
@@ -486,7 +705,7 @@ export function Titlebar() {
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted rounded-lg transition-colors"
               >
                 <Plus className="h-3.5 w-3.5 text-primary" />
-                <span>New Board</span>
+                <span>{t('board.new')}</span>
               </button>
             </div>
           </div>

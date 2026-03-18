@@ -6,8 +6,20 @@ import { ElectronOllama } from 'electron-ollama'
 const OLLAMA_BASE = 'http://127.0.0.1:11434'
 const SETTINGS_FILE = () => join(app.getPath('userData'), 'ollama-settings.json')
 
+import { detectHardware } from './hardware'
+
 let ollamaInstance: InstanceType<typeof ElectronOllama> | null = null
 let managedByUs = false // true if we started this Ollama process
+let cachedNumCtx: number = 8192 // safe default, updated on startup
+
+export function getRecommendedNumCtx(): number {
+  return cachedNumCtx
+}
+
+export function refreshHardwareConfig(): void {
+  const hw = detectHardware()
+  cachedNumCtx = hw.recommendedCtx
+}
 
 // --- Settings persistence ---
 
@@ -122,9 +134,14 @@ export async function ensureOllamaRunning(
 ): Promise<void> {
   // Check if already running (system install or previous app session)
   if (await isOllamaRunning()) {
+    managedByUs = false // We didn't start it, but we can use it
     onLog?.('Ollama already running')
     return
   }
+
+  // Kill any stale ollama processes before starting fresh
+  await killStaleOllama()
+
 
   const ollama = getOllama()
 
@@ -192,13 +209,35 @@ export async function ensureOllamaRunning(
   }
 }
 
+/** Kill orphaned ollama processes that may be left from a previous crashed session */
+async function killStaleOllama(): Promise<void> {
+  try {
+    const { execSync } = await import('child_process')
+    if (process.platform === 'win32') {
+      // Only kill ollama_runners / ollama.exe that are children of our app data path
+      execSync('taskkill /F /IM ollama_llama_server.exe 2>nul', { timeout: 5000 })
+      execSync('taskkill /F /IM ollama.exe 2>nul', { timeout: 5000 })
+    } else {
+      execSync('pkill -f ollama 2>/dev/null || true', { timeout: 5000 })
+    }
+    // Give OS time to release the port
+    await new Promise((r) => setTimeout(r, 1000))
+  } catch {
+    // Ignore — no stale processes to kill
+  }
+}
+
 export async function stopOllama(): Promise<void> {
-  if (!managedByUs) return // Don't kill a system-managed Ollama
   try {
     const ollama = getOllama()
     const server = ollama.getServer()
     if (server) server.stop()
   } catch { /* ignore */ }
+
+  if (managedByUs) {
+    // Ensure the process is really dead
+    await killStaleOllama()
+  }
 }
 
 // --- Model management ---
@@ -263,7 +302,7 @@ export async function warmModel(model: string): Promise<void> {
     const response = await fetch(`${OLLAMA_BASE}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, prompt: '', keep_alive: '10m', options: { num_ctx: 16384 } })
+      body: JSON.stringify({ model, prompt: '', keep_alive: '10m', options: { num_ctx: cachedNumCtx } })
     })
     // Consume body to complete the request
     if (response.body) {

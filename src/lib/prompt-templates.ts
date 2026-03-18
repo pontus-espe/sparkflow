@@ -55,7 +55,9 @@ You write the LEAST code possible to fulfill the request. Every line must earn i
   - deleteRow(index) — remove by array index
   - deleteWhere(predicate) — remove all rows matching a condition
   - All mutations persist to the database automatically. Prefer updateWhere/deleteWhere over index-based methods.
-- useTable(tableName) — persisted CRUD table for structured data. Returns { rows, addRow, updateRow, deleteRow, findRows, clear, count }.
+- useTable(tableName) — persisted CRUD table for structured data. Returns an OBJECT (not an array): { rows, addRow, updateRow, deleteRow, findRows, clear, count }.
+  - CORRECT: const { rows, addRow, updateRow, deleteRow } = useTable('items')
+  - WRONG: const [items, setItems] = useTable('items')  // useTable does NOT return an array!
   - rows: array of objects, each has an auto-generated _id field
   - addRow(obj) — adds a row, returns the generated _id
   - updateRow(id, updates) — merges updates into the row matching _id
@@ -203,11 +205,15 @@ return (
 );
 \`\`\`
 
-## DATA SOURCES
+## DATA SOURCES (IMPORTANT: if data sources are listed below, you MUST use useData() to access them — never useTable or hardcoded data)
 {DATA_SOURCES}
 
+## LANGUAGE
+{LANGUAGE_INSTRUCTION}
+
 ## TASK
-Generate ONLY the function body. No markdown fences. No explanations. No comments. Minimal code, clean design.`
+Generate ONLY the function body. No markdown fences. No explanations. No comments. Minimal code, clean design.
+IMPORTANT: Do NOT add a title, heading, or app name at the top of the microapp — the title bar already shows the app name. Jump straight into the content (stats, controls, data, etc).`
 
 export const RETRY_PROMPT = `The previous code FAILED. Error:
 
@@ -221,21 +227,26 @@ Broken code:
 Fix it. Return ONLY the corrected function body. No fences, no explanations. Keep it minimal.
 Common fixes: remove imports/exports, add key props to .map(), return JSX at end, use UI.Button not <button>, use UI.Input not <input>, onChange gives e.target.value, onCheckedChange gives boolean directly.`
 
-export const METADATA_SYSTEM_PROMPT = `You decide the visual appearance and size for a microapp on a canvas. Given a user's description of the app, return ONLY a single JSON object with these fields:
+export const METADATA_SYSTEM_PROMPT = `You decide the name, visual appearance, and size for a microapp on a canvas. Given a user's description of the app, return ONLY a single JSON object with these fields:
+- name: short, descriptive app name (2-4 words, e.g. "Revenue Dashboard", "Task Tracker", "Lead Pipeline")
 - icon: one of: sparkles, table, chart, list, calendar, mail, users, dollar, heart, star, clock, map, image, music, code, search, settings, shield, zap, briefcase
 - color: one of: default, blue, green, purple, orange, red, pink, yellow
 - width: pixel width (280-800)
 - height: pixel height (200-800)
 
-Pick the icon and color that best match the app's purpose. Size should reflect complexity — simple apps are smaller, dashboards and tables are larger.
+Pick a clear, user-friendly name. Pick the icon and color that best match the app's purpose. Size should reflect complexity — simple apps are smaller, dashboards and tables are larger.
 
-Return ONLY valid JSON, nothing else. Example: {"icon":"chart","color":"blue","width":480,"height":400}`
+Return ONLY valid JSON, nothing else. Example: {"name":"Revenue Dashboard","icon":"chart","color":"blue","width":480,"height":400}`
 
-export function buildPrompt(userPrompt: string, dataSources?: string): string {
-  return MICROAPP_SYSTEM_PROMPT.replace(
-    '{DATA_SOURCES}',
-    dataSources || 'No data sources available yet.'
-  )
+const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
+  en: 'All UI text, labels, headings, placeholders, and messages in the microapp MUST be in English.',
+  sv: 'All UI text, labels, headings, placeholders, and messages in the microapp MUST be in Swedish (Svenska). Use natural Swedish — not machine-translated English.'
+}
+
+export function buildPrompt(userPrompt: string, dataSources?: string, language?: string): string {
+  return MICROAPP_SYSTEM_PROMPT
+    .replace('{DATA_SOURCES}', dataSources || 'No data sources available yet.')
+    .replace('{LANGUAGE_INSTRUCTION}', LANGUAGE_INSTRUCTIONS[language || 'en'] || LANGUAGE_INSTRUCTIONS.en)
 }
 
 export function buildRetryPrompt(code: string, error: string): string {

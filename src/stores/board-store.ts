@@ -40,8 +40,8 @@ export interface BoardStore {
 }
 
 export const useBoardStore = create<BoardStore>((set, get) => ({
-  currentBoardId: 'default',
-  currentBoardName: 'Untitled Board',
+  currentBoardId: '',
+  currentBoardName: '',
   boardList: [],
   viewport: { x: 0, y: 0, zoom: 1 },
   nodes: [],

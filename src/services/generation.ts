@@ -4,6 +4,7 @@ import { buildPrompt, buildRetryPrompt, cleanAIResponse, METADATA_SYSTEM_PROMPT 
 import { useMicroappStore } from '@/stores/microapp-store'
 import { useBoardStore } from '@/stores/board-store'
 import { useDataStore } from '@/stores/data-store'
+import { useAIStore } from '@/stores/ai-store'
 import { log } from '@/stores/log-store'
 
 const MAX_RETRIES = 2
@@ -31,11 +32,12 @@ async function fetchMetadata(prompt: string, microappId: string): Promise<void> 
     const parsed = JSON.parse(jsonMatch[0])
     if (!parsed || typeof parsed !== 'object') return
 
-    log.info('generation', 'Metadata parsed', `icon=${parsed.icon} color=${parsed.color} w=${parsed.width} h=${parsed.height}`)
+    log.info('generation', 'Metadata parsed', `name=${parsed.name} icon=${parsed.icon} color=${parsed.color} w=${parsed.width} h=${parsed.height}`)
 
     const store = useMicroappStore.getState()
     const updates: Record<string, unknown> = {}
 
+    if (typeof parsed.name === 'string' && parsed.name.trim()) updates.name = parsed.name.trim()
     if (typeof parsed.icon === 'string') updates.icon = parsed.icon
     if (typeof parsed.color === 'string') updates.color = parsed.color
 
@@ -57,22 +59,24 @@ async function fetchMetadata(prompt: string, microappId: string): Promise<void> 
       log.info('generation', 'Metadata applied to instance', JSON.stringify(updates).slice(0, 200))
     }
 
-    // Resize the canvas node to match
-    if (width || height) {
-      const boardStore = useBoardStore.getState()
-      const node = boardStore.nodes.find((n) => n.id === microappId)
-      if (node) {
-        const w = width || (node.style?.width as number) || 360
-        const h = height || (node.style?.height as number) || 320
-        useBoardStore.setState({
-          nodes: boardStore.nodes.map((n) =>
-            n.id === microappId ? { ...n, style: { ...n.style, width: w, height: h } } : n
-          )
-        })
-        log.info('generation', 'Node resized', `${w}x${h}`)
-      } else {
-        log.warning('generation', 'Node not found for resize', microappId)
-      }
+    // Update the canvas node (name, size)
+    const boardStore = useBoardStore.getState()
+    const node = boardStore.nodes.find((n) => n.id === microappId)
+    if (node) {
+      const w = width || (node.style?.width as number) || 360
+      const h = height || (node.style?.height as number) || 320
+      const newName = updates.name as string | undefined
+      useBoardStore.setState({
+        nodes: boardStore.nodes.map((n) =>
+          n.id === microappId ? {
+            ...n,
+            data: { ...n.data, ...(newName ? { name: newName } : {}) },
+            style: { ...n.style, ...(width || height ? { width: w, height: h } : {}) }
+          } : n
+        )
+      })
+      if (width || height) log.info('generation', 'Node resized', `${w}x${h}`)
+      if (newName) log.info('generation', 'Node renamed', newName)
     }
   } catch (err) {
     log.error('generation', 'Metadata fetch error', err instanceof Error ? err.message : String(err))
@@ -166,14 +170,27 @@ function buildDataSourceDescription(dataSourceIds?: string[]): string | undefine
     if (!source) return null
 
     const cols = source.columns.map((c) => `${c.name}(${c.type})`).join(', ')
-    const rows = dataStore.getCachedData(id)
-    const sample = rows.slice(0, 3)
+    const allRows = dataStore.getCachedData(id) as Record<string, unknown>[]
+    const sample = allRows.slice(0, 3)
     const sampleStr = sample.length > 0
       ? `\nSample rows: ${JSON.stringify(sample)}`
       : ''
 
+    // Show distinct values for text columns so the model knows what to group/filter by
+    const distinctInfo = source.columns
+      .filter((c) => c.type === 'text')
+      .map((c) => {
+        const vals = [...new Set(allRows.map((r) => r[c.name]).filter(Boolean))]
+        if (vals.length > 0 && vals.length <= 20) {
+          return `  "${c.name}" distinct values: ${JSON.stringify(vals)}`
+        }
+        return null
+      })
+      .filter(Boolean)
+    const distinctStr = distinctInfo.length > 0 ? '\n' + distinctInfo.join('\n') : ''
+
     const firstCol = source.columns[0]?.name || 'col'
-    return `Source ID: "${id}" — ${source.name} (${source.type}, ${source.rowCount} rows)\nColumns: ${cols}${sampleStr}\nAccess: const { rows, columns } = useData('${id}')\nRows are objects keyed by column name — access as row.${firstCol} or row["${firstCol}"]. columns is { name, type }[] — use c.name to get the column name string.`
+    return `Source ID: "${id}" — ${source.name} (${source.type}, ${source.rowCount} rows)\nColumns: ${cols}${distinctStr}${sampleStr}\nAccess: const { rows, columns } = useData('${id}')\nRows are objects keyed by column name — access as row.${firstCol} or row["${firstCol}"].\n\nIMPORTANT: You MUST use useData('${id}') to read this data. Do NOT use useTable or useAppState to recreate or hardcode this data. Use the column names and distinct values above to build filters, groups, and displays.`
   }).filter(Boolean)
 
   return descriptions.length > 0 ? descriptions.join('\n\n') : undefined
@@ -181,8 +198,15 @@ function buildDataSourceDescription(dataSourceIds?: string[]): string | undefine
 
 export async function generateMicroapp(microappId: string, prompt: string, dataSourceIds?: string[]): Promise<void> {
   const store = useMicroappStore.getState()
+  const language = useAIStore.getState().language
   const dataDescription = buildDataSourceDescription(dataSourceIds)
-  const systemPrompt = buildPrompt(prompt, dataDescription)
+  const systemPrompt = buildPrompt(prompt, dataDescription, language)
+
+  // Inject data source context directly into the user prompt so the model can't miss it
+  let fullPrompt = prompt
+  if (dataDescription) {
+    fullPrompt = `${prompt}\n\nThe user has attached data source(s). You MUST use useData() to read the data — do NOT use useTable or hardcode data.\n\n${dataDescription}`
+  }
 
   log.info('generation', `Starting generation for "${prompt.slice(0, 50)}"`, `microapp: ${microappId}`)
   store.updateInstance(microappId, { status: 'generating', streamingText: '', error: null })
@@ -191,7 +215,7 @@ export async function generateMicroapp(microappId: string, prompt: string, dataS
   fetchMetadata(prompt, microappId)
 
   try {
-    let raw = await streamGenerate(prompt, systemPrompt, microappId)
+    let raw = await streamGenerate(fullPrompt, systemPrompt, microappId)
     let cleaned = cleanAIResponse(raw)
     log.info('generation', 'Code cleaned', `${cleaned.length} chars after cleanup`)
 

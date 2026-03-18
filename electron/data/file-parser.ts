@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
 import Papa from 'papaparse'
-import { readFileSync } from 'fs'
+import { readFileSync, writeFileSync } from 'fs'
 import { extname, basename } from 'path'
 
 export interface ParsedData {
@@ -70,6 +70,21 @@ export function parseCsv(filePath: string): ParsedData {
     name: basename(filePath, extname(filePath)),
     columns,
     rows
+  }
+}
+
+export function writeFile(filePath: string, rows: Record<string, unknown>[], sheetName?: string): void {
+  const ext = extname(filePath).toLowerCase()
+
+  if (ext === '.csv' || ext === '.tsv') {
+    const delimiter = ext === '.tsv' ? '\t' : ','
+    const csv = Papa.unparse(rows, { delimiter })
+    writeFileSync(filePath, csv, 'utf-8')
+  } else if (['.xlsx', '.xls', '.xlsm', '.xlsb'].includes(ext)) {
+    const workbook = XLSX.readFile(filePath)
+    const target = sheetName || workbook.SheetNames[0]
+    workbook.Sheets[target] = XLSX.utils.json_to_sheet(rows)
+    XLSX.writeFile(workbook, filePath)
   }
 }
 

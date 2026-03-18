@@ -14,7 +14,9 @@ import {
   setAnthropicApiKey,
   getAnthropicModel,
   setAnthropicModel,
-  type AIProvider
+  type AIProvider,
+  getRecommendedNumCtx,
+  refreshHardwareConfig
 } from '../ollama/manager'
 import { detectHardware } from '../ollama/hardware'
 
@@ -63,7 +65,7 @@ async function generateWithOllama(win: BrowserWindow, prompt: string, system?: s
         options: {
           temperature: 0.25,
           num_predict: 4096,
-          num_ctx: 16384,
+          num_ctx: getRecommendedNumCtx(),
           top_p: 0.9
         }
       })
@@ -302,7 +304,7 @@ export function registerOllamaHandlers(): void {
             prompt,
             system: system || undefined,
             stream: false,
-            options: { temperature: 0.3, num_predict: 256, num_ctx: 16384 }
+            options: { temperature: 0.3, num_predict: 256, num_ctx: getRecommendedNumCtx() }
           })
         })
         if (!response.ok) return { error: `Ollama error: ${response.status}` }
@@ -418,7 +420,8 @@ export async function startOllamaWithApp(): Promise<void> {
 
     // Check hardware capability
     const hardware = detectHardware()
-    console.log(`[Startup] Hardware: ${hardware.freeRamGB}GB free RAM, GPU VRAM: ${hardware.gpuVramGB}GB, sufficient: ${hardware.sufficient}`)
+    refreshHardwareConfig()
+    console.log(`[Startup] Hardware: ${hardware.totalRamGB}GB total, ${hardware.freeRamGB}GB free RAM, GPU VRAM: ${hardware.gpuVramGB}GB, sufficient: ${hardware.sufficient}, num_ctx: ${getRecommendedNumCtx()}`)
 
     if (!hardware.sufficient && provider === 'local') {
       broadcast('ollama:startup-status', {

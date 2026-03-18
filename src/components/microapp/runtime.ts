@@ -202,15 +202,21 @@ export function createUseTable(microappId: string) {
       setTableData([])
     }, [setTableData])
 
-    return {
+    const result = {
       rows: tableData,
       addRow,
       updateRow,
       deleteRow,
       findRows,
       clear,
-      count: tableData.length
+      count: tableData.length,
+      // Support array destructuring: const [rows, setRows] = useTable('name')
+      [Symbol.iterator]: function* () {
+        yield tableData
+        yield setTableData
+      }
     }
+    return result
   }
 }
 

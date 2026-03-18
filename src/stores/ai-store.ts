@@ -2,12 +2,19 @@ import { create } from 'zustand'
 
 export type OllamaStatus = 'not-started' | 'starting' | 'downloading-ollama' | 'pulling-model' | 'warming-model' | 'ready' | 'downloading' | 'error' | 'hardware-insufficient'
 export type AIProvider = 'local' | 'anthropic'
+export type AppLanguage = 'en' | 'sv'
+
+export const LANGUAGES: { id: AppLanguage; label: string; flag: string }[] = [
+  { id: 'en', label: 'English', flag: '🇬🇧' },
+  { id: 'sv', label: 'Svenska', flag: '🇸🇪' }
+]
 
 export interface AIStore {
   status: OllamaStatus
   provider: AIProvider
   model: string | null
   models: string[]
+  language: AppLanguage
   downloadProgress: number
   startupMessage: string
   isGenerating: boolean
@@ -23,6 +30,7 @@ export interface AIStore {
   setProvider: (provider: AIProvider) => void
   setModel: (model: string | null) => void
   setModels: (models: string[]) => void
+  setLanguage: (language: AppLanguage) => void
   setDownloadProgress: (progress: number) => void
   setStartupMessage: (message: string) => void
   setIsGenerating: (generating: boolean) => void
@@ -41,6 +49,7 @@ export const useAIStore = create<AIStore>((set) => ({
   provider: 'local',
   model: null,
   models: [],
+  language: (typeof localStorage !== 'undefined' && localStorage.getItem('app-language') as AppLanguage) || 'en',
   downloadProgress: 0,
   startupMessage: '',
   isGenerating: false,
@@ -56,6 +65,10 @@ export const useAIStore = create<AIStore>((set) => ({
   setProvider: (provider) => set({ provider }),
   setModel: (model) => set({ model }),
   setModels: (models) => set({ models }),
+  setLanguage: (language) => {
+    localStorage.setItem('app-language', language)
+    set({ language })
+  },
   setDownloadProgress: (progress) => set({ downloadProgress: progress }),
   setStartupMessage: (message) => set({ startupMessage: message }),
   setIsGenerating: (generating) => set({ isGenerating: generating }),

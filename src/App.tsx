@@ -21,6 +21,7 @@ export default function App() {
 
   const saveBoard = useCallback(async () => {
     const { nodes, edges, viewport, currentBoardId, currentBoardName } = useBoardStore.getState()
+    if (!currentBoardId) return
     const instances = useMicroappStore.getState().instances
 
     const microapps = Object.values(instances).map((m) => ({
@@ -107,23 +108,35 @@ export default function App() {
     }
   }, [saveBoard])
 
-  // Load board on startup
+  // Load board on startup (restore last-active board or seed welcome board)
   useEffect(() => {
     async function loadBoard() {
-      const data = await ipc.board.load('default')
-      if (!data || !data.canvas_state) {
+      const lastBoardId = localStorage.getItem('board-active-id')
+      if (!lastBoardId || lastBoardId === 'default') {
         // First run — seed welcome board
-        seedWelcomeBoard()
+        await seedWelcomeBoard()
         return
       }
 
+      const data = await ipc.board.load(lastBoardId)
+      if (!data || !data.canvas_state) {
+        // Saved board no longer exists — seed fresh
+        await seedWelcomeBoard()
+        return
+      }
+
+      loadBoardData(lastBoardId, data)
+    }
+
+    function loadBoardData(boardId: string, data: Record<string, unknown>) {
+      localStorage.setItem('board-active-id', boardId)
       try {
         const canvasState = JSON.parse(data.canvas_state as string)
         const loadedNodes = (canvasState.nodes || []).map((n: { type?: string; hidden?: boolean }) =>
           n.type === 'dataSource' ? { ...n, hidden: true } : n
         )
         useBoardStore.setState({
-          currentBoardId: 'default',
+          currentBoardId: boardId,
           currentBoardName: (data.name as string) || 'Untitled Board',
           nodes: loadedNodes,
           edges: canvasState.edges || [],
@@ -134,7 +147,7 @@ export default function App() {
         for (const m of microapps) {
           useMicroappStore.getState().addInstance({
             id: m.id as string,
-            boardId: 'default',
+            boardId,
             name: m.name as string,
             prompt: m.prompt as string,
             source: m.source as string,
@@ -160,6 +173,7 @@ export default function App() {
             type: s.type as 'excel' | 'csv' | 'manual',
             columns: s.columns_def as { name: string; type: 'text' | 'number' | 'date' | 'boolean' }[],
             rowCount: s.row_count as number,
+            filePath: (s.file_path as string) || undefined,
             config: {},
             createdAt: s.created_at as number,
             updatedAt: s.updated_at as number

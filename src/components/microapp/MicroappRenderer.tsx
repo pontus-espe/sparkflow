@@ -4,6 +4,7 @@ import { compileMicroapp, createMicroappFactory } from '@/services/compiler'
 import { buildStdlib } from './runtime'
 import { MicroappErrorFallback } from './MicroappErrorFallback'
 import { useMicroappStore } from '@/stores/microapp-store'
+import { useTranslation } from '@/lib/i18n'
 import type { MicroappColor } from '@/types/microapp'
 
 // oklch values that override --color-primary per theme
@@ -25,6 +26,7 @@ interface MicroappRendererProps {
 
 export function MicroappRenderer({ microappId, onEditSource }: MicroappRendererProps) {
   const instance = useMicroappStore((s) => s.instances[microappId])
+  const { t } = useTranslation()
   const [errorKey, setErrorKey] = useState(0)
 
   const { Component, error } = useMemo(() => {
@@ -67,7 +69,7 @@ export function MicroappRenderer({ microappId, onEditSource }: MicroappRendererP
   if (error) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center p-4 gap-2 text-center">
-        <p className="text-sm font-medium text-destructive">Compilation Error</p>
+        <p className="text-sm font-medium text-destructive">{t('microapp.compilationError')}</p>
         <pre className="text-xs text-muted-foreground max-w-full overflow-auto bg-muted p-2 rounded max-h-24">
           {error}
         </pre>
@@ -78,7 +80,7 @@ export function MicroappRenderer({ microappId, onEditSource }: MicroappRendererP
   if (!Component) {
     return (
       <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
-        No component loaded
+        {t('microapp.noComponent')}
       </div>
     )
   }

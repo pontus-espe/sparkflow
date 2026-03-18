@@ -8,6 +8,7 @@ export interface HardwareInfo {
   gpuVramGB: number | null
   recommendedModel: string
   recommendedQuantization: string
+  recommendedCtx: number
   sufficient: boolean
 }
 
@@ -56,6 +57,16 @@ export function detectHardware(): HardwareInfo {
   // Hardware is insufficient if less than 4GB effective RAM and no dedicated GPU
   const sufficient = effectiveRam >= 4
 
+  // Scale context window to available memory
+  let recommendedCtx: number
+  if (effectiveRam >= 16) {
+    recommendedCtx = 16384
+  } else if (effectiveRam >= 8) {
+    recommendedCtx = 8192
+  } else {
+    recommendedCtx = 4096
+  }
+
   return {
     totalRamGB,
     freeRamGB,
@@ -63,6 +74,7 @@ export function detectHardware(): HardwareInfo {
     gpuVramGB,
     recommendedModel,
     recommendedQuantization,
+    recommendedCtx,
     sufficient
   }
 }

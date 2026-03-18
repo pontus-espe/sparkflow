@@ -2,9 +2,10 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { useAIStore } from '@/stores/ai-store'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Sparkles, X, FileSpreadsheet } from 'lucide-react'
+import { Sparkles, X, FileSpreadsheet, Table } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useDataStore } from '@/stores/data-store'
+import { useTranslation } from '@/lib/i18n'
 
 interface CommandPaletteProps {
   position: { x: number; y: number } | null
@@ -13,12 +14,25 @@ interface CommandPaletteProps {
   dataSourceIds?: string[]
 }
 
+/** Strip file extension and capitalize first letter */
+function formatSourceName(name: string): string {
+  const stripped = name.replace(/\.(csv|xlsx?|tsv|json)$/i, '')
+  return stripped.charAt(0).toUpperCase() + stripped.slice(1)
+}
+
 export function CommandPalette({ position, onClose, onSubmit, dataSourceIds }: CommandPaletteProps) {
   const [prompt, setPrompt] = useState('')
+  const [activeSourceIds, setActiveSourceIds] = useState<string[]>(dataSourceIds || [])
   const { status } = useAIStore()
+  const { t } = useTranslation()
   const sources = useDataStore((s) => s.sources)
   const inputRef = useRef<HTMLInputElement>(null)
   const paletteRef = useRef<HTMLDivElement>(null)
+
+  // Sync when prop changes (e.g. palette reopens with different sources)
+  useEffect(() => {
+    setActiveSourceIds(dataSourceIds || [])
+  }, [dataSourceIds])
 
   useEffect(() => {
     if (position && inputRef.current) {
@@ -59,35 +73,57 @@ export function CommandPalette({ position, onClose, onSubmit, dataSourceIds }: C
     }
   }, [position, onClose])
 
+  const handleRemoveSource = useCallback((id: string) => {
+    setActiveSourceIds((prev) => prev.filter((s) => s !== id))
+  }, [])
+
   const handleSubmit = useCallback(() => {
     if (!prompt.trim()) return
-    onSubmit(prompt.trim(), dataSourceIds)
+    const ids = activeSourceIds.length > 0 ? activeSourceIds : undefined
+    onSubmit(prompt.trim(), ids)
     setPrompt('')
     onClose()
-  }, [prompt, onSubmit, onClose, dataSourceIds])
+  }, [prompt, onSubmit, onClose, activeSourceIds])
 
   if (!position) return null
 
   const isReady = status === 'ready'
 
   return (
-    <div
-      ref={paletteRef}
-      className="fixed z-50 w-[480px] rounded-xl border bg-popover shadow-2xl overflow-hidden"
-      style={{
-        left: Math.min(position.x, window.innerWidth - 500),
-        top: Math.min(position.y, window.innerHeight - 400)
-      }}
-    >
-      {/* Data source badges */}
-      {dataSourceIds && dataSourceIds.length > 0 && (
-        <div className="flex items-center gap-2 px-3 pt-2 pb-1">
-          {dataSourceIds.map((id) => (
-            <span key={id} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              <FileSpreadsheet className="h-3 w-3" />
-              {sources[id]?.name || id}
-            </span>
-          ))}
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/40 backdrop-blur-sm">
+      <div
+        ref={paletteRef}
+        className="w-[480px] rounded-xl border bg-popover shadow-2xl overflow-hidden"
+      >
+      {/* Data source chips */}
+      {activeSourceIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5 pb-1">
+          {activeSourceIds.map((id) => {
+            const source = sources[id]
+            const sourceType = source?.type
+            const displayName = source ? formatSourceName(source.name) : id
+            const isExcel = sourceType === 'excel'
+
+            return (
+              <span
+                key={id}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/60 pl-2 pr-1 py-1 text-xs text-foreground transition-colors hover:bg-muted"
+              >
+                {isExcel ? (
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                ) : (
+                  <Table className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                )}
+                <span className="truncate max-w-[160px]">{displayName}</span>
+                <button
+                  onClick={() => handleRemoveSource(id)}
+                  className="ml-0.5 rounded-md p-0.5 text-muted-foreground hover:text-foreground hover:bg-background/80 transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )
+          })}
         </div>
       )}
 
@@ -99,7 +135,7 @@ export function CommandPalette({ position, onClose, onSubmit, dataSourceIds }: C
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-          placeholder={isReady ? 'Describe a microapp...' : 'AI is not ready yet...'}
+          placeholder={isReady ? t('command.placeholder') : t('command.placeholderDisabled')}
           disabled={!isReady}
           className="border-0 shadow-none focus-visible:ring-0 bg-transparent"
         />
@@ -116,21 +152,22 @@ export function CommandPalette({ position, onClose, onSubmit, dataSourceIds }: C
       {/* Footer hint */}
       <div className="px-3 py-2 text-xs text-muted-foreground border-t">
         {isReady ? (
-          <span>Press <kbd className="px-1 py-0.5 rounded bg-muted text-foreground">Enter</kbd> to generate — the app will appear on canvas</span>
+          <span>{t('command.hint')}</span>
         ) : (
           <span className={cn(
             (status === 'starting') && 'text-yellow-500',
             (status === 'downloading' || status === 'downloading-ollama' || status === 'pulling-model') && 'text-blue-500',
             status === 'error' && 'text-destructive'
           )}>
-            {status === 'starting' && 'Ollama is starting...'}
-            {status === 'downloading-ollama' && 'Downloading Ollama runtime...'}
-            {status === 'pulling-model' && 'Downloading AI model... This may take a few minutes.'}
-            {status === 'downloading' && 'Downloading AI model...'}
-            {status === 'error' && 'AI connection error. Is Ollama running?'}
-            {status === 'not-started' && 'Connecting to AI...'}
+            {status === 'starting' && t('ai.starting')}
+            {status === 'downloading-ollama' && t('ai.downloadingRuntime')}
+            {status === 'pulling-model' && t('ai.downloadingModelLong')}
+            {status === 'downloading' && t('ai.downloadingModel')}
+            {status === 'error' && t('ai.connectionError')}
+            {status === 'not-started' && t('ai.connecting')}
           </span>
         )}
+      </div>
       </div>
     </div>
   )

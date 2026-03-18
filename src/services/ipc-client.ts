@@ -49,8 +49,8 @@ export const ipc = {
     }
   },
   data: {
-    importFile: () => getApi().dataImportFile(),
-    importFilePath: (path: string) => getApi().dataImportFilePath(path),
+    importFile: (boardId: string) => getApi().dataImportFile(boardId),
+    importFilePath: (path: string, boardId: string) => getApi().dataImportFilePath(path, boardId),
     onSourceUpdated: (cb: (update: { id: string; name: string; columns: { name: string; type: string }[]; rowCount: number; rows: unknown[] }) => void): (() => void) => {
       const cleanup = getApi().onDataSourceUpdated(cb as (update: { id: string; name: string; columns: unknown[]; rowCount: number; rows: unknown[] }) => void)
       return () => { cleanup() }
@@ -87,7 +87,43 @@ export const ipc = {
     load: (id: string) => getApi().boardLoad(id),
     list: () => getApi().boardList(),
     create: (name: string) => getApi().boardCreate(name),
-    delete: (id: string) => getApi().boardDelete(id)
+    delete: (id: string) => getApi().boardDelete(id),
+    reset: () => getApi().boardReset()
+  },
+  agent: {
+    chat: (message: string, boardId?: string) =>
+      getApi().agentChat(message, boardId) as Promise<{ text?: string; error?: string }>,
+    newSession: () => getApi().agentNewSession() as Promise<{ success: boolean }>,
+    history: () => getApi().agentHistory() as Promise<{ role: string; content: string; toolName?: string }[]>,
+    onStream: (cb: (chunk: string) => void): (() => void) => {
+      const c = getApi().onAgentStream(cb); return () => { c() }
+    },
+    onToolStart: (cb: (data: { name: string; input: string }) => void): (() => void) => {
+      const c = getApi().onAgentToolStart(cb); return () => { c() }
+    },
+    onToolEnd: (cb: (data: { name: string; result: string }) => void): (() => void) => {
+      const c = getApi().onAgentToolEnd(cb); return () => { c() }
+    },
+    onReasoning: (cb: (text: string) => void): (() => void) => {
+      const c = getApi().onAgentReasoning(cb); return () => { c() }
+    },
+    onNavigateBoard: (cb: (data: { boardId: string; boardName: string }) => void): (() => void) => {
+      const c = getApi().onAgentNavigateBoard(cb); return () => { c() }
+    },
+    onFocusNode: (cb: (data: { nodeId: string }) => void): (() => void) => {
+      const c = getApi().onAgentFocusNode(cb); return () => { c() }
+    },
+    onCreateMicroapp: (cb: (data: {
+      boardId: string; prompt: string; code: string;
+      metadata: { name: string; icon: string; color: string; width: number; height: number };
+      position: { x: number; y: number } | null;
+      dataSourceIds: string[]
+    }) => void): (() => void) => {
+      const c = getApi().onAgentCreateMicroapp(cb); return () => { c() }
+    },
+    onUpdateMicroapp: (cb: (data: { microappId: string; code: string }) => void): (() => void) => {
+      const c = getApi().onAgentUpdateMicroapp(cb); return () => { c() }
+    }
   },
   app: {
     onUpdateAvailable: (cb: (info: { currentVersion: string; latestVersion: string; url: string }) => void): (() => void) => {

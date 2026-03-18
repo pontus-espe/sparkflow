@@ -8,6 +8,7 @@ export interface DataSource {
   config: Record<string, unknown>
   columns: ColumnDef[]
   rowCount: number
+  filePath?: string
   createdAt: number
   updatedAt: number
 }
@@ -22,5 +23,6 @@ export interface DataSourceNodeData {
   name: string
   type: DataSourceType
   rowCount: number
+  filePath?: string
   [key: string]: unknown
 }

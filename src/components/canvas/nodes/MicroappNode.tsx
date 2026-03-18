@@ -1,7 +1,7 @@
-import { memo, useState, useCallback, useMemo } from 'react'
+import { memo, useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { type NodeProps, NodeResizeControl, Handle, Position } from '@xyflow/react'
 import {
-  GripVertical, Code, Sparkles, Trash2, Loader2, RotateCcw, AlertCircle, Database, ChevronDown, Palette,
+  Code, Sparkles, Trash2, Loader2, RotateCcw, AlertCircle, Database, MoreHorizontal, Palette,
   BarChart3, List, Calendar, Mail, Users, DollarSign, Heart, Star,
   Clock, Map, Image, Music, Search, Settings, Shield, Zap, Briefcase, Table
 } from 'lucide-react'
@@ -11,6 +11,7 @@ import { useMicroappStore } from '@/stores/microapp-store'
 import { generateMicroapp } from '@/services/generation'
 import type { MicroappNodeData, MicroappIcon, MicroappColor } from '@/types/microapp'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/lib/i18n'
 
 const ICON_MAP: Record<MicroappIcon, React.ComponentType<{ className?: string }>> = {
   sparkles: Sparkles, table: Table, chart: BarChart3, list: List, calendar: Calendar,
@@ -54,11 +55,13 @@ function MicroappNodeComponent({ id, data, selected }: NodeProps) {
   const removeInstance = useMicroappStore((s) => s.removeInstance)
   const updateInstance = useMicroappStore((s) => s.updateInstance)
   const instance = useMicroappStore((s) => s.instances[microappId])
+  const { t } = useTranslation()
   const [showSource, setShowSource] = useState(false)
   const [editingSource, setEditingSource] = useState('')
-  const [barOpen, setBarOpen] = useState(false)
   const [dataVisible, setDataVisible] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
   const [showCustomize, setShowCustomize] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const appColor = (instance?.color || 'default') as MicroappColor
   const appIcon = (instance?.icon || 'sparkles') as MicroappIcon
@@ -97,7 +100,6 @@ function MicroappNodeComponent({ id, data, selected }: NodeProps) {
   }, [microappId, instance?.prompt])
 
   // Find data source nodes connected to this microapp via edges
-  // Use a stable string key to avoid infinite re-render from new array refs
   const connectedDataSourceKey = useBoardStore((s) =>
     s.edges.filter((e) => e.target === id).map((e) => e.source).join(',')
   )
@@ -113,7 +115,6 @@ function MicroappNodeComponent({ id, data, selected }: NodeProps) {
       const store = useBoardStore.getState()
       const newVisible = !dataVisible
       setDataVisible(newVisible)
-      // Toggle hidden state on connected data source nodes
       const updatedNodes = store.nodes.map((n) =>
         connectedDataSourceIds.includes(n.id)
           ? { ...n, hidden: !newVisible }
@@ -124,12 +125,18 @@ function MicroappNodeComponent({ id, data, selected }: NodeProps) {
     [dataVisible, connectedDataSourceIds]
   )
 
-  const showBar = !isReady || showSource || barOpen
-
-  const handleToggleBar = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setBarOpen((v) => !v)
-  }, [])
+  // Close menu on click outside
+  useEffect(() => {
+    if (!showMenu) return
+    const handle = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false)
+        setShowCustomize(false)
+      }
+    }
+    const timer = setTimeout(() => window.addEventListener('mousedown', handle), 0)
+    return () => { clearTimeout(timer); window.removeEventListener('mousedown', handle) }
+  }, [showMenu])
 
   return (
     <>
@@ -140,128 +147,142 @@ function MicroappNodeComponent({ id, data, selected }: NodeProps) {
       />
       <Handle type="target" position={Position.Left} className="!bg-primary !w-2.5 !h-2.5" />
       <div
-        className={cn("relative flex flex-col rounded-xl border bg-card shadow-lg overflow-hidden", colorClasses.border)}
+        className={cn("group relative flex flex-col rounded-xl border bg-card shadow-lg overflow-hidden", colorClasses.border)}
         style={{ width: '100%', height: '100%' }}
       >
-        {/* Toggle arrow — floats top-right inside content when bar is hidden */}
-        {!showBar && (
-          <button
-            onClick={handleToggleBar}
-            className="absolute top-1.5 right-1.5 z-20 p-1 rounded-md hover:bg-muted/80 transition-colors"
-            title="Show toolbar"
-          >
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-          </button>
-        )}
-
-        {/* Top bar — slides in/out */}
+        {/* Title bar — always visible, acts as drag handle */}
         <div
           className={cn(
-            'drag-handle flex items-center gap-2 px-3 border-b backdrop-blur-sm cursor-grab active:cursor-grabbing shrink-0 overflow-hidden transition-all duration-200',
-            colorClasses.bar,
-            showBar ? 'max-h-10 py-2 opacity-100' : 'max-h-0 py-0 opacity-0 border-b-0'
+            'drag-handle flex items-center gap-2 px-3 py-1.5 cursor-grab active:cursor-grabbing shrink-0',
+            colorClasses.bar
           )}
         >
-          <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           {status === 'error' ? (
             <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
           ) : (
             <IconComponent className={cn("h-3.5 w-3.5 shrink-0", colorClasses.icon)} />
           )}
           <span className="text-xs font-medium truncate flex-1">{name as string}</span>
-          <div className="flex items-center gap-1 shrink-0">
-            {instance?.source && (
-              <button
-                onClick={handleEditSource}
-                className="p-1 rounded hover:bg-muted transition-colors"
-                title="Edit source"
-              >
-                <Code className="h-3 w-3 text-muted-foreground" />
-              </button>
-            )}
+
+          {/* Actions — visible on hover */}
+          <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
             {status === 'error' && (
               <button
                 onClick={handleRegenerate}
                 className="p-1 rounded hover:bg-muted transition-colors"
-                title="Regenerate"
+                title={t('microapp.regenerate')}
               >
-                <RotateCcw className="h-3 w-3 text-primary" />
+                <RotateCcw className="h-3.5 w-3.5 text-primary" />
               </button>
             )}
-            {hasDataSources && (
-              <button
-                onClick={handleToggleData}
-                className={cn(
-                  'p-1 rounded transition-colors',
-                  dataVisible ? 'bg-primary/10 text-primary' : 'hover:bg-muted text-muted-foreground'
-                )}
-                title={dataVisible ? 'Hide data sources' : 'Show data sources'}
-              >
-                <Database className="h-3 w-3" />
-              </button>
-            )}
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowCustomize((v) => !v) }}
-              className={cn("p-1 rounded transition-colors", showCustomize ? colorClasses.accent : "hover:bg-muted")}
-              title="Customize"
-            >
-              <Palette className="h-3 w-3 text-muted-foreground" />
-            </button>
             <button
               onClick={handleDelete}
               className="p-1 rounded hover:bg-destructive/20 transition-colors"
-              title="Delete"
+              title={t('microapp.delete')}
             >
-              <Trash2 className="h-3 w-3 text-destructive" />
+              <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
             </button>
             <button
-              onClick={handleToggleBar}
-              className="p-1 rounded hover:bg-muted transition-colors"
-              title="Hide toolbar"
+              onClick={(e) => { e.stopPropagation(); setShowMenu((v) => !v); setShowCustomize(false) }}
+              className={cn("p-1 rounded transition-colors", showMenu ? 'bg-muted' : 'hover:bg-muted')}
+              title={t('microapp.moreOptions')}
             >
-              <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 rotate-180" />
+              <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           </div>
         </div>
 
-        {/* Customize panel */}
-        {showCustomize && (
-          <div className="shrink-0 border-b bg-card/90 backdrop-blur-sm px-3 py-2 space-y-2 nodrag nowheel nopan">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-muted-foreground w-10 shrink-0">Color</span>
-              <div className="flex gap-1 flex-wrap">
-                {COLOR_SWATCHES.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => updateInstance(microappId, { color: s.id })}
-                    className={cn(
-                      'w-4 h-4 rounded-full transition-all',
-                      s.bg,
-                      appColor === s.id ? 'ring-2 ring-foreground ring-offset-1 ring-offset-card scale-110' : 'hover:scale-110'
-                    )}
-                  />
-                ))}
+        {/* Dropdown menu */}
+        {showMenu && (
+          <div
+            ref={menuRef}
+            className="absolute top-8 right-2 z-30 w-44 rounded-lg border bg-popover shadow-xl py-1 nodrag nowheel nopan"
+          >
+            {instance?.prompt && (
+              <button
+                onClick={() => { handleRegenerate(); setShowMenu(false) }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs hover:bg-muted transition-colors text-left"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                {t('microapp.regenerateAI')}
+              </button>
+            )}
+            {instance?.source && (
+              <button
+                onClick={() => { handleEditSource(); setShowMenu(false) }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs hover:bg-muted transition-colors text-left"
+              >
+                <Code className="h-3.5 w-3.5 text-muted-foreground" />
+                {t('microapp.editCode')}
+              </button>
+            )}
+            {hasDataSources && (
+              <button
+                onClick={(e) => { handleToggleData(e); setShowMenu(false) }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs hover:bg-muted transition-colors text-left"
+              >
+                <Database className="h-3.5 w-3.5 text-muted-foreground" />
+                {dataVisible ? t('microapp.hideData') : t('microapp.showData')}
+              </button>
+            )}
+            <button
+              onClick={() => setShowCustomize((v) => !v)}
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs hover:bg-muted transition-colors text-left"
+            >
+              <Palette className="h-3.5 w-3.5 text-muted-foreground" />
+              {t('microapp.customize')}
+            </button>
+
+            {/* Inline customize panel */}
+            {showCustomize && (
+              <div className="border-t mt-1 pt-1.5 px-3 pb-2 space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground w-10 shrink-0">{t('microapp.color')}</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {COLOR_SWATCHES.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => updateInstance(microappId, { color: s.id })}
+                        className={cn(
+                          'w-4 h-4 rounded-full transition-all',
+                          s.bg,
+                          appColor === s.id ? 'ring-2 ring-foreground ring-offset-1 ring-offset-card scale-110' : 'hover:scale-110'
+                        )}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-start gap-1.5">
+                  <span className="text-[10px] text-muted-foreground w-10 shrink-0 pt-0.5">{t('microapp.icon')}</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {ICON_LIST.map((iconName) => {
+                      const Icon = ICON_MAP[iconName]
+                      return (
+                        <button
+                          key={iconName}
+                          onClick={() => updateInstance(microappId, { icon: iconName })}
+                          className={cn(
+                            'p-1 rounded transition-colors',
+                            appIcon === iconName ? cn(colorClasses.accent, colorClasses.icon) : 'hover:bg-muted text-muted-foreground'
+                          )}
+                        >
+                          <Icon className="h-3 w-3" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="flex items-start gap-1.5">
-              <span className="text-[10px] text-muted-foreground w-10 shrink-0 pt-0.5">Icon</span>
-              <div className="flex gap-1 flex-wrap">
-                {ICON_LIST.map((iconName) => {
-                  const Icon = ICON_MAP[iconName]
-                  return (
-                    <button
-                      key={iconName}
-                      onClick={() => updateInstance(microappId, { icon: iconName })}
-                      className={cn(
-                        'p-1 rounded transition-colors',
-                        appIcon === iconName ? cn(colorClasses.accent, colorClasses.icon) : 'hover:bg-muted text-muted-foreground'
-                      )}
-                    >
-                      <Icon className="h-3 w-3" />
-                    </button>
-                  )
-                })}
-              </div>
+            )}
+
+            <div className="border-t mt-1 pt-1">
+              <button
+                onClick={handleDelete}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs hover:bg-destructive/10 transition-colors text-left text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {t('microapp.delete')}
+              </button>
             </div>
           </div>
         )}
@@ -284,13 +305,13 @@ function MicroappNodeComponent({ id, data, selected }: NodeProps) {
                   onClick={handleSaveSource}
                   className="text-xs px-3 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  Save & Recompile
+                  {t('microapp.saveRecompile')}
                 </button>
                 <button
                   onClick={() => setShowSource(false)}
                   className="text-xs px-3 py-1 rounded bg-muted hover:bg-muted/80"
                 >
-                  Cancel
+                  {t('microapp.cancel')}
                 </button>
               </div>
             </div>
@@ -304,7 +325,7 @@ function MicroappNodeComponent({ id, data, selected }: NodeProps) {
           ) : status === 'error' && !instance?.source ? (
             <div className="w-full h-full flex flex-col items-center justify-center p-4 gap-3 text-center">
               <AlertCircle className="h-8 w-8 text-destructive" />
-              <p className="text-sm font-medium text-destructive">Generation Failed</p>
+              <p className="text-sm font-medium text-destructive">{t('microapp.generationFailed')}</p>
               <pre className="text-xs text-muted-foreground max-w-full overflow-auto bg-muted p-2 rounded max-h-24">
                 {instance?.error}
               </pre>
@@ -313,22 +334,13 @@ function MicroappNodeComponent({ id, data, selected }: NodeProps) {
                 className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5"
               >
                 <RotateCcw className="h-3 w-3" />
-                Retry
+                {t('microapp.retry')}
               </button>
             </div>
           ) : (
             <MicroappRenderer microappId={microappId} onEditSource={handleEditSource} />
           )}
         </div>
-
-        {/* Left drag grip — visible when toolbar is open */}
-        {showBar && (
-          <div className="absolute left-0 inset-y-0 z-10 w-5 drag-handle flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 hover:opacity-100 transition-opacity">
-            <div className="rounded-r bg-card/80 backdrop-blur-sm py-3 px-0.5">
-              <GripVertical className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </div>
-        )}
       </div>
     </>
   )
@@ -354,6 +366,7 @@ function GeneratingView({ status, streamingText, error, prompt }: {
   error: string | null
   prompt: string
 }) {
+  const { t } = useTranslation()
   const { reasoning } = extractReasoning(streamingText)
   const hasContent = streamingText.length > 0
 
@@ -361,13 +374,10 @@ function GeneratingView({ status, streamingText, error, prompt }: {
     <div className="w-full h-full flex flex-col overflow-hidden">
       {/* Skeleton app mockup */}
       <div className="flex-1 p-4 space-y-4">
-        {/* Fake header skeleton */}
         <div className="space-y-2">
           <SkeletonLine width="w-1/3" />
           <SkeletonLine width="w-1/2" />
         </div>
-
-        {/* Fake content rows */}
         <div className="space-y-3 pt-2">
           <div className="flex gap-3">
             <SkeletonLine width="w-full" />
@@ -382,8 +392,6 @@ function GeneratingView({ status, streamingText, error, prompt }: {
             <SkeletonLine width="w-2/3" />
           </div>
         </div>
-
-        {/* Fake button row */}
         <div className="flex gap-2 pt-2">
           <div className="h-6 w-16 rounded bg-muted animate-pulse" />
           <div className="h-6 w-16 rounded bg-muted animate-pulse" />
@@ -398,9 +406,9 @@ function GeneratingView({ status, streamingText, error, prompt }: {
             'text-[11px] font-medium',
             status === 'retrying' ? 'text-yellow-500' : 'text-primary'
           )}>
-            {status === 'queued' && 'Queued...'}
-            {status === 'generating' && 'Building app...'}
-            {status === 'retrying' && 'Auto-fixing...'}
+            {status === 'queued' && t('microapp.queued')}
+            {status === 'generating' && t('microapp.building')}
+            {status === 'retrying' && t('microapp.autoFixing')}
           </span>
         </div>
 
